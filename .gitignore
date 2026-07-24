@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+release/
+windows-dynamic-island/
+output/
+
+.agents/
+.pet-runs/
+.playwright-cli/
+ikun-hoops-v2-upgrade/
+
+peter-current-validation.json
+skills-lock.json
+*.log
+.DS_Store
+Thumbs.db

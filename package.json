@@ -1,0 +1,64 @@
+{
+  "name": "windows-dynamic-island",
+  "version": "1.0.20",
+  "productName": "Windows 灵动岛",
+  "description": "Windows 桌面状态与快捷控制中心",
+  "author": "Windows Dynamic Island",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit && electron-vite build",
+    "test": "tsx src/shared/settings.test.ts && tsx src/shared/islandState.test.ts && tsx src/shared/islandPresentation.test.ts && tsx src/shared/triggerGesture.test.ts && tsx src/shared/launcher.test.ts",
+    "pack:win": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.3",
+    "electron-store": "^10.1.0",
+    "uiohook-napi": "^1.5.5",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^4.0.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.3.6"
+  },
+  "build": {
+    "appId": "com.desktop.dynamicisland",
+    "productName": "Windows 灵动岛",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/uiohook-napi/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "resources/app-icon.ico",
+      "target": "nsis",
+      "artifactName": "Windows-Dynamic-Island-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

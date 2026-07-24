@@ -1,0 +1,2153 @@
+:root {
+  font-family:
+    'Segoe UI Variable Text',
+    'Segoe UI',
+    'Microsoft YaHei UI',
+    system-ui,
+    sans-serif;
+  color-scheme: dark;
+  background: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stage {
+  width: 100vw;
+  height: 100vh;
+  --hairline: color-mix(in srgb, var(--fg) 8%, transparent);
+  --hairline-strong: color-mix(in srgb, var(--fg) 12%, transparent);
+  --card: color-mix(in srgb, var(--fg) 4%, transparent);
+  --card-hover: color-mix(in srgb, var(--accent) 10%, var(--card));
+  --cloud-glow: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--fg);
+  text-rendering: geometricPrecision;
+}
+
+.surfaceFrame {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.surface-compact .surfaceFrame {
+  padding: 8px;
+}
+
+.surface-trigger .surfaceFrame {
+  place-items: start center;
+}
+
+.surface-panel .surfaceFrame {
+  padding: 12px;
+}
+
+.stage.isInactive {
+  pointer-events: none;
+}
+
+.compact {
+  position: relative;
+  width: 148px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 22px 18px 22px 18px;
+  padding: 0 18px 0 24px;
+  color: var(--fg);
+  background: transparent;
+  box-shadow:
+    inset 0 0 0 1px var(--hairline-strong),
+    inset 0 1px 0 var(--hairline-strong),
+    0 4px 11px rgb(2 4 7 / 26%);
+  cursor: pointer;
+  font-size: 19px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  isolation: isolate;
+  opacity: 0;
+  transform: translateY(-5px) scale(0.96);
+  transform-origin: top center;
+  will-change: transform, opacity;
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.compact::before {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  content: '';
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 24% -20%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 54%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg) 86%, #1a2430), var(--panel));
+  opacity: var(--alpha);
+  pointer-events: none;
+}
+
+.compact::after {
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  content: '';
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 78% 110%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 48%),
+    linear-gradient(110deg, transparent 30%, rgb(243 245 247 / 7%) 50%, transparent 68%);
+  opacity: var(--alpha);
+  pointer-events: none;
+}
+
+.isActive .compact {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.compact:active {
+  transform: scale(0.98);
+}
+
+.triggerControl {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  color: var(--fg);
+  background: transparent;
+  cursor: grab;
+  isolation: isolate;
+  touch-action: none;
+}
+
+.triggerControl.is-dragging {
+  cursor: grabbing;
+}
+
+.triggerArtworkMotion {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-100%);
+  transform-origin: top center;
+  transition:
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.isActive .triggerArtworkMotion {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.triggerControl:focus-visible {
+  outline: 0;
+}
+
+.triggerControl:focus-visible .triggerSkin {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 72%, var(--fg)),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 86%, transparent);
+}
+
+.triggerSkin {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+  transform-origin: top center;
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.canvasTriggerSkin,
+.triggerCanvas {
+  width: 100%;
+  height: 100%;
+}
+
+.canvasTriggerSkin {
+  transform: translateY(calc(var(--pull-distance) * var(--cloud-response)));
+}
+
+.triggerCanvas {
+  display: block;
+}
+
+.triggerControl {
+  --accent: var(--cloud-color);
+}
+
+.cloudEffects {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  overflow: hidden;
+  opacity: 0.72;
+  pointer-events: none;
+  transform-origin: top center;
+  transition:
+    opacity 140ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cloudStrand {
+  position: absolute;
+  top: calc(3px + var(--cloud-index) * 2.4px);
+  left: 50%;
+  width: calc(38% + var(--cloud-index) * 4%);
+  height: calc(7px + var(--cloud-index) * 1.2px);
+  display: block;
+  border-bottom: 1px solid color-mix(in srgb, var(--cloud-color) 74%, transparent);
+  border-radius: 50%;
+  opacity: calc(0.82 - var(--cloud-index) * 0.075);
+  transform: translateX(-50%) scaleX(0.88);
+}
+
+.cloudParticle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  display: block;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cloud-color) 82%, var(--fg));
+  box-shadow: 0 0 5px color-mix(in srgb, var(--cloud-color) 68%, transparent);
+  opacity: 0.24;
+}
+
+.triggerControl:hover .cloudEffects {
+  opacity: 1;
+  transform: translateY(calc(var(--cloud-response) * 2px)) scaleY(calc(1 + var(--cloud-response) * 0.04));
+}
+
+.gesture-vertical .cloudEffects {
+  opacity: 1;
+  transform: translateY(var(--pull-distance)) scaleY(var(--pull-scale));
+}
+
+.liquidRidge {
+  transform: scaleY(var(--pull-scale));
+}
+
+.liquidRidge svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.liquidBody {
+  fill: color-mix(in srgb, var(--panel) 88%, #10151c);
+  fill-opacity: var(--alpha);
+  stroke: rgb(0 0 0 / 82%);
+  stroke-width: 1.3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.liquidEdge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 62%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.liquidCurrent {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.liquidCurrentRear {
+  stroke: color-mix(in srgb, var(--accent) 27%, transparent);
+  stroke-width: 0.7px;
+  stroke-dasharray: 24 90;
+}
+
+.liquidCurrentFront {
+  stroke: color-mix(in srgb, var(--fg) 52%, var(--accent));
+  stroke-width: 0.55px;
+  stroke-dasharray: 14 72;
+}
+
+.liquidSeam {
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 32px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), color-mix(in srgb, var(--fg) 78%, var(--accent)), var(--accent), transparent);
+  opacity: 0.78;
+  transform: translateX(-50%);
+  transition: opacity 140ms ease, transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.style-liquid-ridge:hover .liquidSeam {
+  opacity: 1;
+  transform: translateX(-50%) scaleX(1.38);
+}
+
+.magneticRail {
+  display: grid;
+  grid-template-columns: 1fr 112px 1fr;
+  align-items: center;
+  border-radius: 0 0 15px 15px;
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 7%, transparent) 32%, color-mix(in srgb, var(--accent) 10%, transparent) 50%, color-mix(in srgb, var(--accent) 7%, transparent) 68%, transparent),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, #20262e), color-mix(in srgb, var(--bg) 84%, #030508));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 12%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 0 0 1px rgb(0 0 0 / 74%);
+  opacity: var(--alpha);
+}
+
+.magneticTrack {
+  position: relative;
+  height: 1px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.magneticTrackLeft {
+  margin-left: 18px;
+}
+
+.magneticTrackRight {
+  margin-right: 18px;
+}
+
+.magneticTrack span {
+  position: absolute;
+  top: 0;
+  width: 36px;
+  height: 1px;
+  display: block;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.76;
+}
+
+.magneticTrackLeft span {
+  right: 0;
+}
+
+.magneticTrackRight span {
+  left: 0;
+}
+
+.magneticCore {
+  position: relative;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 0 0 11px 11px;
+  background: color-mix(in srgb, var(--panel) 76%, #171c24);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--fg) 7%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 26%, transparent);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.magneticEnergy {
+  width: 48px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), color-mix(in srgb, var(--fg) 64%, var(--accent)), var(--accent), transparent);
+  opacity: 0.76;
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease;
+}
+
+.magneticTongue {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 72px;
+  height: 4px;
+  border-radius: 0 0 6px 6px;
+  background: color-mix(in srgb, var(--panel) 78%, #090c10);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 48%, transparent);
+  transform: translate(-50%, var(--pull-distance));
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.style-magnetic-rail:hover .magneticTrackLeft {
+  transform: translateX(-4px);
+}
+
+.style-magnetic-rail:hover .magneticTrackRight {
+  transform: translateX(4px);
+}
+
+.style-magnetic-rail:hover .magneticEnergy {
+  opacity: 1;
+  transform: scaleX(1.42);
+}
+
+.style-magnetic-rail.gesture-horizontal .magneticCore {
+  transform: scaleX(0.76);
+}
+
+.style-magnetic-rail.gesture-vertical .magneticTrackLeft {
+  transform: translateX(6px);
+}
+
+.style-magnetic-rail.gesture-vertical .magneticTrackRight {
+  transform: translateX(-6px);
+}
+
+.gesture-horizontal .triggerSkin {
+  opacity: 0.94;
+}
+
+.edgeDock {
+  border-radius: 0 0 18px 18px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--bg) 78%, #020305), color-mix(in srgb, var(--panel) 91%, #111821) 28%, color-mix(in srgb, var(--panel) 96%, #151c25) 50%, color-mix(in srgb, var(--panel) 91%, #111821) 72%, color-mix(in srgb, var(--bg) 78%, #020305));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 8%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 28%, transparent),
+    inset 0 0 0 1px rgb(0 0 0 / 68%);
+  opacity: var(--alpha);
+  transform: scaleY(var(--pull-scale));
+}
+
+.dockRail {
+  position: absolute;
+  top: 8px;
+  right: 22px;
+  left: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 8%, transparent) 12%, color-mix(in srgb, var(--accent) 24%, transparent) 50%, color-mix(in srgb, var(--fg) 8%, transparent) 88%, transparent);
+}
+
+.dockPulse {
+  position: absolute;
+  top: 8px;
+  width: 62px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0;
+}
+
+.dockPulseLeft {
+  left: 32px;
+}
+
+.dockPulseRight {
+  right: 32px;
+  transform: scaleX(-1);
+}
+
+.dockCore {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 132px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 0 0 18px 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, #1c2530), color-mix(in srgb, var(--bg) 82%, #030507));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--fg) 7%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--accent) 42%, transparent);
+  transform: translateX(-50%);
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dockCore span {
+  width: 44px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), color-mix(in srgb, var(--fg) 52%, var(--accent)), var(--accent), transparent);
+  opacity: 0.7;
+  transition: opacity 140ms ease, transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.style-edge-dock:hover .dockCore {
+  transform: translateX(-50%) translateY(1px);
+}
+
+.style-edge-dock:hover .dockCore span {
+  opacity: 1;
+  transform: scaleX(1.45);
+}
+
+.compact time {
+  position: relative;
+  z-index: 1;
+}
+
+.compactHalo {
+  position: absolute;
+  top: 3px;
+  left: 13px;
+  z-index: 0;
+  width: 58px;
+  height: 30px;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, var(--cloud-glow), transparent 70%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.pulse {
+  position: relative;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.panel {
+  position: relative;
+  width: 640px;
+  height: 250px;
+  overflow: hidden;
+  border-radius: 30px 25px 30px 25px;
+  padding: 16px 20px;
+  background: transparent;
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    inset 0 1px 0 var(--hairline-strong),
+    0 7px 18px rgb(2 4 7 / 31%);
+  isolation: isolate;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.985);
+  transform-origin: top center;
+  will-change: transform, opacity;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel::before {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  content: '';
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 5% -15%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 43%),
+    radial-gradient(ellipse at 92% 118%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 40%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg) 88%, #17222d), var(--panel) 76%);
+  opacity: var(--alpha);
+  pointer-events: none;
+}
+
+.panel::after {
+  position: absolute;
+  top: -86px;
+  right: -72px;
+  z-index: -1;
+  width: 300px;
+  height: 168px;
+  content: '';
+  border-radius: 50%;
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--accent) 16%, transparent), transparent 68%);
+  opacity: 0.46;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.isActive .panel {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.dashboardPanel {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.surface-creator,
+.surface-launcher {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 76% -20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 38%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg) 94%, #152231), var(--panel));
+}
+
+.surface-creator .surfaceFrame,
+.surface-launcher .surfaceFrame {
+  display: block;
+}
+
+.studioShell {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr) 266px;
+  grid-template-rows: 76px minmax(0, 1fr);
+  color: var(--fg);
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px),
+    linear-gradient(rgb(255 255 255 / 2%) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.studioHeader {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hairline);
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+}
+
+.studioHeader > div:first-child {
+  flex: 0 0 auto;
+}
+
+.studioHeader h1 {
+  margin: 2px 0 0;
+  font-family: Bahnschrift, 'Segoe UI Variable Display', sans-serif;
+  font-size: 24px;
+  font-weight: 520;
+  letter-spacing: -.03em;
+}
+
+.studioEyebrow {
+  color: color-mix(in srgb, var(--accent) 66%, var(--fg));
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+
+.studioCurrent {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0 12px;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  background: rgb(255 255 255 / 3%);
+  font-size: 11px;
+}
+
+.studioToolbar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.studioName {
+  width: 178px;
+  height: 36px;
+  display: grid;
+  grid-template-columns: 45px minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0 8px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.studioName span {
+  color: color-mix(in srgb, var(--fg) 38%, transparent);
+  font-size: 9px;
+}
+
+.studioName span.dirty {
+  color: color-mix(in srgb, #ffb15f 82%, var(--fg));
+}
+
+.studioName input {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  color: var(--fg);
+  background: transparent;
+  outline: 0;
+  font-size: 10px;
+}
+
+.studioHistory {
+  display: flex;
+  gap: 3px;
+}
+
+.studioHistory button,
+.studioSaveButton,
+.studioSaveAsButton {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--fg) 68%, transparent);
+  background: rgb(255 255 255 / 3%);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.studioHistory button {
+  width: 32px;
+  padding: 0;
+}
+
+.studioSaveButton,
+.studioSaveAsButton {
+  padding: 0 11px;
+}
+
+.studioSaveButton {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: color-mix(in srgb, var(--bg) 88%, #000);
+  background: var(--accent);
+  font-weight: 720;
+}
+
+.studioHistory button:hover:not(:disabled),
+.studioSaveAsButton:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.studioHistory button:disabled,
+.studioSaveButton:disabled,
+.studioSaveAsButton:disabled {
+  cursor: default;
+  opacity: .35;
+}
+
+.studioCurrent span,
+.studioWork > button span {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.studioSidebar,
+.studioInspector {
+  min-height: 0;
+  border-right: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+
+.studioSidebar {
+  padding: 18px 12px;
+}
+
+.studioSectionTitle {
+  padding: 0 9px 8px;
+  color: color-mix(in srgb, var(--fg) 35%, transparent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.studioSidebar nav {
+  display: grid;
+  gap: 3px;
+}
+
+.studioSidebar nav button {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 9px;
+  color: color-mix(in srgb, var(--fg) 58%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+}
+
+.studioSidebar nav button:hover {
+  color: var(--fg);
+  background: rgb(255 255 255 / 4%);
+}
+
+.studioSidebar nav button.active {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.studioSidebar nav b,
+.studioLibraryTitle b {
+  color: color-mix(in srgb, var(--fg) 34%, transparent);
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.studioLibraryTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 22px;
+  padding: 0 9px 9px;
+  color: color-mix(in srgb, var(--fg) 52%, transparent);
+  font-size: 10px;
+}
+
+.studioLibraryTitle b {
+  margin-left: auto;
+}
+
+.studioWorks {
+  max-height: calc(100vh - 390px);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.studioWorks > p {
+  margin: 4px 9px;
+  color: color-mix(in srgb, var(--fg) 28%, transparent);
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.studioWork {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  padding: 5px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.studioWork > button {
+  min-width: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  border: 0;
+  padding: 0 4px;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studioWork > button.active {
+  color: var(--fg);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.studioWork > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.studioWork > div button {
+  width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.studioWork > div button:hover {
+  color: var(--fg);
+  background: rgb(255 255 255 / 6%);
+}
+
+.studioWorkspace {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 220px 44px minmax(0, 1fr);
+  overflow: hidden;
+  padding: 18px;
+}
+
+.studioPreview {
+  position: relative;
+  display: grid;
+  place-items: start center;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 50% 0, color-mix(in srgb, var(--cloud-color) 12%, transparent), transparent 55%),
+    color-mix(in srgb, var(--bg) 72%, #06111f);
+}
+
+.studioGrid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 3%) 1px, transparent 1px),
+    linear-gradient(rgb(255 255 255 / 3%) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(to bottom, #000, transparent 92%);
+  pointer-events: none;
+}
+
+.studioPreviewArt {
+  position: relative;
+  min-width: 150px;
+  max-width: 92%;
+}
+
+.studioPreviewArt .triggerSkin,
+.presetArt .triggerSkin {
+  inset: 0;
+  transform: none;
+}
+
+.studioPreviewMeta {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  display: flex;
+  justify-content: space-between;
+  color: color-mix(in srgb, var(--fg) 32%, transparent);
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+.studioPreviewMeta b {
+  color: color-mix(in srgb, var(--accent) 58%, var(--fg));
+  font-weight: 500;
+}
+
+.presetHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  padding: 0 2px 8px;
+}
+
+.presetHeader h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.presetHeader span {
+  color: color-mix(in srgb, var(--fg) 34%, transparent);
+  font-size: 9px;
+}
+
+.presetGrid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(116px, 1fr));
+  grid-auto-rows: 102px;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 3px;
+  scrollbar-width: thin;
+}
+
+.presetCard {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 0;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.presetCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.presetCard.active {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.presetArt {
+  position: absolute;
+  inset: 0 0 35px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.presetArt * {
+  animation: none !important;
+}
+
+.presetName,
+.presetSize {
+  position: absolute;
+  bottom: 10px;
+  font-size: 9px;
+}
+
+.presetName {
+  left: 10px;
+  max-width: calc(100% - 62px);
+  overflow: hidden;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presetSize {
+  right: 9px;
+  color: color-mix(in srgb, var(--fg) 28%, transparent);
+  font-family: Consolas, monospace;
+}
+
+.studioInspector {
+  overflow: auto;
+  border-right: 0;
+  border-left: 1px solid var(--hairline);
+  padding: 18px 16px;
+  scrollbar-width: thin;
+}
+
+.inspectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.inspectorHeader button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 5px 7px;
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.inspectorHeader button:hover {
+  color: var(--fg);
+}
+
+.studioColorField {
+  height: 46px;
+  display: grid;
+  grid-template-columns: 1fr 32px 68px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  padding: 0 10px;
+  background: rgb(255 255 255 / 2%);
+  font-size: 10px;
+}
+
+.studioColorField input {
+  width: 32px;
+  height: 26px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.studioColorField output {
+  color: color-mix(in srgb, var(--fg) 40%, transparent);
+  font-family: Consolas, monospace;
+  font-size: 9px;
+}
+
+.inspectorGroup {
+  margin-top: 16px;
+}
+
+.inspectorGroup h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 5px;
+  color: color-mix(in srgb, var(--fg) 35%, transparent);
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+
+.inspectorGroup h3 button {
+  border: 0;
+  padding: 2px 0;
+  color: color-mix(in srgb, var(--accent) 58%, var(--fg));
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.studioField {
+  display: grid;
+  gap: 4px;
+  padding: 6px 2px;
+}
+
+.studioField > span:first-child {
+  display: flex;
+  justify-content: space-between;
+  color: color-mix(in srgb, var(--fg) 58%, transparent);
+  font-size: 9px;
+}
+
+.studioField output {
+  color: color-mix(in srgb, var(--accent) 60%, var(--fg));
+  font-family: Consolas, monospace;
+}
+
+.studioFieldControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 8px;
+}
+
+.studioField input[type='range'] {
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--cloud-color);
+  cursor: pointer;
+}
+
+.studioNumber {
+  width: 58px;
+  height: 25px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 0 5px;
+  color: var(--fg);
+  background: rgb(255 255 255 / 3%);
+  outline: 0;
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  text-align: right;
+}
+
+.studioNumber:focus {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+}
+
+.launcherManager {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-rows: 104px minmax(0, 1fr);
+  color: var(--fg);
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px),
+    linear-gradient(rgb(255 255 255 / 2%) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.launcherManagerHeader {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--hairline);
+  padding: 20px 24px;
+  background: color-mix(in srgb, var(--panel) 76%, transparent);
+  backdrop-filter: blur(22px);
+}
+
+.launcherEyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-family: Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.launcherManagerHeader h1 {
+  margin: 0;
+  font-family: 'Segoe UI Variable Display', 'Microsoft YaHei UI', sans-serif;
+  font-size: 24px;
+  font-weight: 690;
+  letter-spacing: -0.035em;
+}
+
+.launcherManagerHeader p {
+  margin: 3px 0 0;
+  color: color-mix(in srgb, var(--fg) 50%, transparent);
+  font-size: 11px;
+}
+
+.launcherHeaderActions {
+  display: flex;
+  gap: 8px;
+}
+
+.launcherHeaderActions button,
+.launcherContentToolbar > button,
+.launcherSelectionBar button,
+.launcherWebsitePane form button {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0 14px;
+  color: var(--fg);
+  background: var(--card);
+  cursor: pointer;
+}
+
+.launcherHeaderActions .launcherDoneButton,
+.launcherSelectionBar button,
+.launcherWebsitePane form button {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: color-mix(in srgb, var(--panel) 90%, #08100b);
+  background: var(--accent);
+  font-weight: 700;
+}
+
+.launcherHeaderActions button:disabled,
+.launcherContentToolbar button:disabled,
+.launcherSelectionBar button:disabled,
+.launcherWebsitePane form button:disabled,
+.launcherLocalButton:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.launcherManagerNav {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  padding: 18px 14px;
+  background: color-mix(in srgb, var(--panel) 64%, transparent);
+}
+
+.launcherCapacity {
+  margin: 0 4px 20px;
+}
+
+.launcherCapacity > span {
+  display: block;
+  color: color-mix(in srgb, var(--fg) 48%, transparent);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.launcherCapacity strong {
+  display: block;
+  margin: 3px 0 8px;
+  font-family: 'Segoe UI Variable Display', sans-serif;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.launcherCapacity > div {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.launcherCapacity i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  transition: width 180ms ease;
+}
+
+.launcherManagerNav nav {
+  display: grid;
+  gap: 5px;
+}
+
+.launcherManagerNav nav button {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 14px 11px 14px 11px;
+  padding: 8px 10px;
+  color: color-mix(in srgb, var(--fg) 64%, transparent);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.launcherManagerNav nav button.active {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.launcherManagerNav nav button > svg {
+  color: var(--accent);
+}
+
+.launcherManagerNav nav button span {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.launcherManagerNav nav button small {
+  color: color-mix(in srgb, var(--fg) 38%, transparent);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.launcherManagerNav nav button b {
+  min-width: 19px;
+  border-radius: 8px;
+  padding: 3px 5px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 9px;
+  text-align: center;
+}
+
+.launcherLocalButton {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: auto;
+  border: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 12px;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.launcherManagerContent {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 22px 20px;
+}
+
+.launcherContentToolbar,
+.launcherSelectionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.launcherContentToolbar {
+  margin-bottom: 14px;
+}
+
+.launcherSearch {
+  min-width: 220px;
+  height: 34px;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  padding: 0 11px;
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  background: rgb(255 255 255 / 3%);
+}
+
+.launcherSearch input {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  color: var(--fg);
+  background: transparent;
+  outline: 0;
+  font-size: 11px;
+}
+
+.launcherAppList {
+  min-height: 0;
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 7px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.launcherAppCard {
+  min-width: 0;
+  height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 15px 11px 15px 11px;
+  padding: 0 10px;
+  color: color-mix(in srgb, var(--fg) 78%, transparent);
+  background: var(--card);
+  text-align: left;
+  cursor: pointer;
+}
+
+.launcherAppCard:hover:not(:disabled),
+.launcherAppCard.selected {
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+
+.launcherAppCard:disabled {
+  cursor: default;
+}
+
+.launcherCandidateIcon,
+.launcherSelectedIcon {
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.launcherCandidateIcon {
+  width: 34px;
+  height: 34px;
+}
+
+.launcherCandidateIcon img,
+.launcherSelectedIcon img,
+.shortcutImage {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.launcherCandidateIcon:has(img),
+.launcherSelectedIcon:has(img),
+.launcherTile > span:has(.shortcutImage) {
+  background: transparent;
+}
+
+.launcherAppCard > span:nth-child(2) {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launcherAppCard > i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--accent);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.launcherSelectionBar {
+  height: 48px;
+  flex: 0 0 auto;
+  margin-top: 10px;
+  border-top: 1px solid var(--hairline);
+  color: color-mix(in srgb, var(--fg) 52%, transparent);
+  font-size: 10px;
+}
+
+.launcherSelectionBar b {
+  color: var(--accent);
+}
+
+.launcherEmpty {
+  grid-column: 1 / -1;
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  gap: 9px;
+  color: color-mix(in srgb, var(--fg) 36%, transparent);
+  text-align: center;
+}
+
+.launcherEmpty p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.launcherWebsitePane {
+  width: min(540px, 100%);
+  margin: auto;
+}
+
+.websiteMark {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  margin-bottom: 20px;
+  border-radius: 26px 18px 26px 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  text-align: center;
+}
+
+.websiteMark span {
+  font-family: Consolas, monospace;
+  font-size: 7px;
+  letter-spacing: 0.12em;
+}
+
+.launcherWebsitePane h2,
+.launcherSelectedPane h2 {
+  margin: 0 0 5px;
+  font-size: 20px;
+}
+
+.launcherWebsitePane > div:nth-child(2) p,
+.launcherSelectedPane header p {
+  margin: 0;
+  color: color-mix(in srgb, var(--fg) 46%, transparent);
+  font-size: 10px;
+}
+
+.launcherWebsitePane form {
+  display: grid;
+  gap: 13px;
+  margin-top: 24px;
+}
+
+.launcherWebsitePane form label {
+  display: grid;
+  gap: 6px;
+}
+
+.launcherWebsitePane form label span {
+  color: color-mix(in srgb, var(--fg) 58%, transparent);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.launcherWebsitePane form input {
+  height: 40px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px;
+  padding: 0 12px;
+  color: var(--fg);
+  background: rgb(255 255 255 / 3%);
+  outline: 0;
+}
+
+.launcherWebsitePane form input:focus {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.launcherWebsitePane form button {
+  justify-self: start;
+  margin-top: 5px;
+}
+
+.launcherLimitNotice {
+  color: #ff9278;
+  font-size: 10px;
+}
+
+.launcherSelectedPane {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.launcherSelectedPane > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.launcherSelectedPane > header > span {
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 5px 8px;
+  color: var(--accent);
+  font-family: Consolas, monospace;
+  font-size: 10px;
+}
+
+.launcherSelectedList {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow: auto;
+}
+
+.launcherSelectedRow {
+  min-width: 0;
+  height: 52px;
+  display: grid;
+  grid-template-columns: 20px 34px minmax(0, 1fr) 42px auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px 11px 14px 11px;
+  padding: 0 9px;
+  background: var(--card);
+}
+
+.launcherSelectedRow.dragging {
+  opacity: 0.45;
+}
+
+.dragHandle {
+  color: color-mix(in srgb, var(--fg) 28%, transparent);
+  cursor: grab;
+}
+
+.launcherSelectedIcon {
+  width: 34px;
+  height: 34px;
+}
+
+.launcherSelectedRow > input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 7px;
+  color: var(--fg);
+  background: transparent;
+  outline: 0;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.launcherSelectedRow > input:focus {
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: rgb(255 255 255 / 3%);
+}
+
+.launcherEntryKind {
+  color: color-mix(in srgb, var(--fg) 34%, transparent);
+  font-size: 9px;
+  text-align: center;
+}
+
+.launcherRowActions {
+  display: flex;
+  gap: 4px;
+}
+
+.launcherRowActions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  background: rgb(255 255 255 / 4%);
+  cursor: pointer;
+}
+
+.launcherRowActions button:disabled {
+  opacity: 0.22;
+  cursor: default;
+}
+
+.launcherRowActions button.danger:hover {
+  color: #ff9278;
+  background: rgb(255 92 74 / 10%);
+}
+
+.spinning {
+  animation: launcher-spin 0.9s linear infinite;
+}
+
+.panelChrome {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding-left: 4px;
+}
+
+.liveStatus {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.liveStatus svg {
+  color: var(--accent);
+}
+
+.panelTools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.panelClock {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--fg);
+}
+
+.panelClock time {
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  font-size: 20px;
+  font-weight: 670;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+.panelClock small {
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  font-size: 9px;
+}
+
+.roundButton {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  color: color-mix(in srgb, var(--fg) 78%, transparent);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.roundButton:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.roundButton:active {
+  transform: scale(0.94);
+}
+
+.launcherGrid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.launcherTile {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 17px 13px 17px 13px;
+  padding: 6px;
+  color: color-mix(in srgb, var(--fg) 82%, transparent);
+  background:
+    radial-gradient(circle at 8% 8%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 48%),
+    var(--card);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.launcherTile > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  border-radius: 12px 9px 12px 9px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.launcherTile.fixed > span {
+  color: color-mix(in srgb, var(--fg) 68%, transparent);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+
+.launcherTile:hover {
+  color: var(--fg);
+  background: var(--card-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.launcherTile:active {
+  transform: scale(0.98);
+}
+
+.roundButton:active,
+.launcherTile:active {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 28%, rgb(243 245 247 / 8%));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+  transform: scale(0.92);
+}
+
+.launcherTile b {
+  max-width: 92px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes launcher-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 82%, var(--fg));
+  outline-offset: 2px;
+}
+
+.feedbackToast {
+  position: absolute;
+  left: 50%;
+  bottom: 82px;
+  z-index: 3;
+  margin: 0;
+  padding: 8px 11px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .isActive .liquidCurrentRear {
+    animation: liquid-current 6.4s linear infinite;
+  }
+
+  .isActive .liquidCurrentFront {
+    animation: liquid-current 4.8s linear infinite reverse;
+  }
+
+  .isActive .magneticTrackLeft span {
+    animation: magnetic-scan-left 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .isActive .magneticTrackRight span {
+    animation: magnetic-scan-right 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .isActive .magneticEnergy {
+    animation: magnetic-breathe 3.2s ease-in-out infinite;
+  }
+
+  .isActive .dockPulseLeft {
+    animation: dock-pulse-left 6.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .isActive .dockPulseRight {
+    animation: dock-pulse-right 6.2s cubic-bezier(0.4, 0, 0.2, 1) 180ms infinite;
+  }
+
+  .isActive .cloudStrand {
+    animation: cloud-strand calc(5.6s / var(--cloud-speed)) linear infinite;
+    animation-delay: calc(var(--cloud-index) * -310ms);
+  }
+
+  .isActive .cloudParticle {
+    animation: cloud-particle calc(3.8s / var(--cloud-speed)) ease-in-out infinite;
+    animation-delay: calc(var(--cloud-index) * -240ms);
+  }
+
+  .pulse {
+    animation: status-pulse 2.4s ease-in-out infinite;
+  }
+
+  .dashboardPanel {
+    animation: content-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .compactHalo {
+    animation: cloud-breathe 3.6s ease-in-out infinite alternate;
+  }
+
+  .panel::after {
+    animation: cloud-drift 7s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes liquid-current {
+  from {
+    stroke-dashoffset: 0;
+    opacity: 0.46;
+  }
+  48% {
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: -114;
+    opacity: 0.46;
+  }
+}
+
+@keyframes magnetic-scan-left {
+  0%,
+  68% {
+    opacity: 0;
+    transform: translateX(-74px);
+  }
+  78% {
+    opacity: 0.8;
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+@keyframes magnetic-scan-right {
+  0%,
+  68% {
+    opacity: 0;
+    transform: translateX(74px);
+  }
+  78% {
+    opacity: 0.8;
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+@keyframes magnetic-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes dock-pulse-left {
+  0%,
+  72% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  80% {
+    opacity: 0.58;
+  }
+  96%,
+  100% {
+    opacity: 0;
+    transform: translateX(242px);
+  }
+}
+
+@keyframes dock-pulse-right {
+  0%,
+  72% {
+    opacity: 0;
+    transform: translateX(0) scaleX(-1);
+  }
+  80% {
+    opacity: 0.58;
+  }
+  96%,
+  100% {
+    opacity: 0;
+    transform: translateX(-242px) scaleX(-1);
+  }
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.88);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cloud-strand {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateX(-50%) scaleX(0.72);
+  }
+  48% {
+    opacity: 0.88;
+    transform: translateX(-50%) scaleX(1);
+  }
+}
+
+@keyframes cloud-particle {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: translate3d(-8px, -1px, 0) scale(0.7);
+  }
+  50% {
+    opacity: 0.82;
+    transform: translate3d(8px, 4px, 0) scale(1.15);
+  }
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cloud-breathe {
+  from {
+    opacity: 0.4;
+    transform: translate3d(-5px, 0, 0) scale(0.9);
+  }
+  to {
+    opacity: 0.7;
+    transform: translate3d(12px, 0, 0) scale(1.14);
+  }
+}
+
+@keyframes cloud-drift {
+  from {
+    opacity: 0.32;
+    transform: translate3d(-12px, 2px, 0) scale(0.92);
+  }
+  to {
+    opacity: 0.55;
+    transform: translate3d(14px, -3px, 0) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .compact::before,
+  .compact::after,
+  .triggerSkin,
+  .panel::before,
+  .panel::after {
+    opacity: 1;
+  }
+}

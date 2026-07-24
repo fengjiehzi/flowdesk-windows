@@ -1,0 +1,45 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="42" y1="20" x2="214" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#142033"/>
+      <stop offset=".52" stop-color="#05080D"/>
+      <stop offset="1" stop-color="#020409"/>
+    </linearGradient>
+    <linearGradient id="pill" x1="54" y1="80" x2="202" y2="162" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#151B24"/>
+      <stop offset=".55" stop-color="#070A0F"/>
+      <stop offset="1" stop-color="#010205"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 128) rotate(90) scale(82 112)">
+      <stop stop-color="#38BDF8" stop-opacity=".48"/>
+      <stop offset=".56" stop-color="#2563EB" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="24" y="48" width="208" height="156" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#000000" flood-opacity=".48"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#38BDF8" flood-opacity=".35"/>
+    </filter>
+    <filter id="dotGlow" x="165" y="90" width="42" height="42" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#22F15F" flood-opacity=".95"/>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <path d="M37 59c35-28 147-28 182 0" stroke="#FFFFFF" stroke-opacity=".13" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="128" cy="128" r="102" fill="url(#glow)"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="44" y="78" width="168" height="92" rx="46" fill="url(#pill)"/>
+    <rect x="45.5" y="79.5" width="165" height="89" rx="44.5" stroke="#FFFFFF" stroke-opacity=".12" stroke-width="3"/>
+    <path d="M62 97c19-11 113-12 132 0" stroke="#FFFFFF" stroke-opacity=".11" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <circle cx="84" cy="124" r="13" fill="#F8FAFC"/>
+  <circle cx="128" cy="124" r="13" fill="#F8FAFC"/>
+  <g filter="url(#dotGlow)">
+    <circle cx="186" cy="124" r="8" fill="#22F15F"/>
+  </g>
+
+  <path d="M72 196c34 19 78 19 112 0" stroke="#38BDF8" stroke-opacity=".88" stroke-width="13" stroke-linecap="round"/>
+  <path d="M92 210c22 7 50 7 72 0" stroke="#22F15F" stroke-opacity=".9" stroke-width="7" stroke-linecap="round"/>
+</svg>
