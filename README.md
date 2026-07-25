@@ -13,7 +13,15 @@
 
 ## 安装与运行
 
-当前仓库提供源码。需要 Windows 10/11、Node.js 20.19 或更高版本。
+### 直接安装
+
+前往 [Releases](https://github.com/fengjiehzi/vibe-flow/releases/latest) 下载最新版 `Windows-Dynamic-Island-*-Setup.exe`，双击并按向导完成安装。
+
+> 当前安装包尚未进行代码签名，Windows SmartScreen 可能显示“未知发布者”。请只从本仓库 Releases 下载，并核对对应版本发布说明中的 SHA-256。
+
+### 从源码运行
+
+需要 Windows 10/11、Node.js 20.19 或更高版本。
 
 ```powershell
 git clone https://github.com/fengjiehzi/vibe-flow.git
