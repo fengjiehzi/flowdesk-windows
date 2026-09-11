@@ -4,7 +4,6 @@ export type IslandState =
   | 'COMPACT'
   | 'EXPANDED'
   | 'COLLAPSING'
-  | 'SETTINGS_OPEN'
 
 export type IslandEvent =
   | 'SHOW_COMPACT'
@@ -13,17 +12,14 @@ export type IslandEvent =
   | 'COLLAPSE_DONE'
   | 'LEAVE_DELAY'
   | 'REENTER'
-  | 'OPEN_SETTINGS'
-  | 'CLOSE_SETTINGS'
   | 'HIDE'
 
 const transitions: Partial<Record<IslandState, Partial<Record<IslandEvent, IslandState>>>> = {
   HIDDEN: { SHOW_COMPACT: 'ENTERING' },
   ENTERING: { ENTER_DONE: 'COMPACT', EXPAND: 'EXPANDED', LEAVE_DELAY: 'HIDDEN', HIDE: 'HIDDEN' },
   COMPACT: { EXPAND: 'EXPANDED', LEAVE_DELAY: 'HIDDEN', HIDE: 'HIDDEN' },
-  EXPANDED: { LEAVE_DELAY: 'COLLAPSING', OPEN_SETTINGS: 'SETTINGS_OPEN', HIDE: 'HIDDEN' },
-  COLLAPSING: { COLLAPSE_DONE: 'COMPACT', REENTER: 'EXPANDED', LEAVE_DELAY: 'HIDDEN', HIDE: 'HIDDEN' },
-  SETTINGS_OPEN: { CLOSE_SETTINGS: 'EXPANDED', HIDE: 'HIDDEN' }
+  EXPANDED: { LEAVE_DELAY: 'COLLAPSING', HIDE: 'HIDDEN' },
+  COLLAPSING: { COLLAPSE_DONE: 'COMPACT', REENTER: 'EXPANDED', LEAVE_DELAY: 'HIDDEN', HIDE: 'HIDDEN' }
 }
 
 export function nextIslandState(state: IslandState, event: IslandEvent): IslandState {

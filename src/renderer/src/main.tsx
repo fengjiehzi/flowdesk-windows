@@ -1090,7 +1090,7 @@ function App() {
     }
   }, [])
 
-  const panelState = ['EXPANDED', 'SETTINGS_OPEN'].includes(snapshot.state)
+  const panelState = snapshot.state === 'EXPANDED'
   const surface: RendererSurface = requestedSurface === 'creator' || requestedSurface === 'settings' || requestedSurface === 'launcher'
     ? requestedSurface
     : requestedSurface ?? (panelState ? 'panel' : 'compact')
@@ -1238,12 +1238,16 @@ function App() {
                     </button>
                   ))}
                   <button className="launcherTile fixed" title="管理快捷入口" type="button" onClick={() => window.island?.openLauncherManager()}>
-                    <span><Settings size={22} /></span>
+                    <span><Library size={22} /></span>
                     <b>管理</b>
                   </button>
                   <button className="launcherTile fixed" title="流云创作器" type="button" onClick={() => window.island?.openCreator()}>
                     <span><Waves size={22} /></span>
                     <b>创作</b>
+                  </button>
+                  <button className="launcherTile fixed" title="通用设置" type="button" onClick={() => window.island?.openSettings()}>
+                    <span><Settings size={22} /></span>
+                    <b>设置</b>
                   </button>
                 </div> : (
                   <NotificationPanelContent

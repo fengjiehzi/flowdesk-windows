@@ -245,7 +245,6 @@ function scheduleNotificationHide() {
 function canShowNotificationPreview(centerState: NotificationCenterState) {
   return centerState.suppression === 'accepts'
     && state !== 'EXPANDED'
-    && state !== 'SETTINGS_OPEN'
     && !(creatorWindow?.isVisible() || settingsWindow?.isVisible() || launcherWindow?.isVisible())
 }
 
@@ -354,7 +353,6 @@ function setExpanded(expanded: boolean) {
 
 function collapseToCompact() {
   clearTransitionTimer()
-  if (state === 'SETTINGS_OPEN') transition('CLOSE_SETTINGS')
   if (state === 'EXPANDED') {
     transition('LEAVE_DELAY')
     transitionTimer = setTimeout(() => {
@@ -495,6 +493,10 @@ function registerIpc(store: Store<IslandSettings>) {
   ipcMain.on('creator:open', () => {
     hideNotificationPreview()
     void openCreatorWindow()
+  })
+  ipcMain.on('settings:open', () => {
+    hideNotificationPreview()
+    void openSettingsWindow()
   })
 }
 

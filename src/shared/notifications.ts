@@ -102,7 +102,10 @@ export function notificationSnapshotDiff(previous: Set<string> | null, snapshot:
   }
 }
 
-export function filterMutedNotifications(items: BridgeNotification[], mutedAppIds: Iterable<string>) {
+export function filterMutedNotifications<T extends Pick<BridgeNotification, 'appId'>>(
+  items: readonly T[],
+  mutedAppIds: Iterable<string>
+): T[] {
   const muted = new Set(mutedAppIds)
   return items.filter((item) => !muted.has(item.appId))
 }

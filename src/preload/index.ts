@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('island', {
   openLauncherManager: () => ipcRenderer.send('launcher:openManager'),
   setExpanded: (expanded: boolean) => ipcRenderer.send('island:setExpanded', expanded),
   openCreator: () => ipcRenderer.send('creator:open'),
+  openSettings: () => ipcRenderer.send('settings:open'),
   onSnapshot: (callback: (snapshot: IslandSnapshot) => void) => {
     const listener = (_: Electron.IpcRendererEvent, snapshot: IslandSnapshot) => callback(snapshot)
     ipcRenderer.on('island:snapshot', listener)

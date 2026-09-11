@@ -6,7 +6,6 @@ assert.deepEqual(visibleSurfacesForState('ENTERING'), { compact: true, panel: fa
 assert.deepEqual(visibleSurfacesForState('COMPACT'), { compact: true, panel: false })
 assert.deepEqual(visibleSurfacesForState('COLLAPSING'), { compact: true, panel: false })
 assert.deepEqual(visibleSurfacesForState('EXPANDED'), { compact: false, panel: true })
-assert.deepEqual(visibleSurfacesForState('SETTINGS_OPEN'), { compact: false, panel: true })
 assert.equal(isSurfaceActive('compact', 'COMPACT'), true)
 assert.equal(isSurfaceActive('panel', 'COMPACT'), false)
 assert.equal(isSurfaceActive('panel', 'COLLAPSING'), false)

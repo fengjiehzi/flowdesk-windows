@@ -46,12 +46,14 @@ export class NotificationController {
   getState(): NotificationCenterState {
     const settings = this.options.settings()
     this.items = mergeNotificationItems(this.items, [])
+    const mutedIds = settings.mutedNotificationApps.map((app) => app.id)
+    const visibleItems = filterMutedNotifications(this.items, mutedIds)
     return {
       accessStatus: settings.notificationsEnabled ? this.accessStatus : 'disabled',
       enabled: settings.notificationsEnabled,
       suppression: this.suppression,
-      items: this.items,
-      unreadCount: unreadNotificationCount(this.items),
+      items: visibleItems,
+      unreadCount: unreadNotificationCount(visibleItems),
       sources: notificationSources(this.items, settings.mutedNotificationApps, [...this.discoveredSources.values()]),
       desktopAdapters: [...this.desktopAdapters.values()]
     }

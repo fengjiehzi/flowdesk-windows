@@ -30,6 +30,7 @@ declare global {
       openLauncherManager: () => void
       setExpanded: (expanded: boolean) => void
       openCreator: () => void
+      openSettings: () => void
       onSnapshot: (callback: (snapshot: IslandSnapshot) => void) => () => void
       onLauncherState: (callback: (state: LauncherState) => void) => () => void
       onNotificationState: (callback: (state: NotificationCenterState) => void) => () => void
