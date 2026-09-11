@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { Component, useEffect, ErrorInfo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   AppWindow,
   ArrowDown,
   ArrowUp,
+  Bell,
+  BellOff,
   Check,
   ChevronDown,
   Copy,
@@ -29,23 +31,52 @@ import {
 import { defaultSettings, type FluidCloudCreation, type FluidCloudSettings, type IslandSettings } from '../../shared/settings'
 import { isSurfaceActive, type IslandSurface } from '../../shared/islandPresentation'
 import { maxLauncherEntries, type InstalledAppCandidate, type LauncherEntryView, type LauncherState } from '../../shared/launcher'
+import type { NotificationCenterState, NotificationSource, SystemNotificationItem } from '../../shared/notifications'
 import {
-  classicTriggerStyles,
-  resolveTriggerGestureAxis,
-  shouldRevealFromTrigger,
   triggerPresetCategories,
   triggerPresets,
   triggerStyles,
-  type TriggerGestureAxis,
   type TriggerStyle
 } from '../../shared/triggerGesture'
 import type { IslandSnapshot } from '../../shared/types'
-import { TriggerCanvas } from './triggerCanvas'
+import { FluxCanvas } from './fluxCanvas'
 import './styles.css'
 
+type ErrorBoundaryProps = { children: React.ReactNode }
+type ErrorBoundaryState = { hasError: boolean; error: Error | null }
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('ErrorBoundary caught error:', error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="errorBoundary">
+          <h2>组件出错</h2>
+          <p>{this.state.error?.message}</p>
+          <button onClick={() => this.setState({ hasError: false, error: null })}>重试</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 const surfaceParameter = new URLSearchParams(window.location.search).get('surface')
-type RendererSurface = IslandSurface | 'creator' | 'launcher'
-const requestedSurface: RendererSurface | null = surfaceParameter === 'trigger' || surfaceParameter === 'compact' || surfaceParameter === 'panel' || surfaceParameter === 'creator' || surfaceParameter === 'launcher'
+const previewVariant = new URLSearchParams(window.location.search).get('variant')
+type RendererSurface = IslandSurface | 'creator' | 'settings' | 'launcher'
+const requestedSurface: RendererSurface | null = surfaceParameter === 'compact' || surfaceParameter === 'panel' || surfaceParameter === 'creator' || surfaceParameter === 'settings' || surfaceParameter === 'launcher'
   ? surfaceParameter
   : null
 
@@ -60,20 +91,54 @@ const palettes = {
   rose: ['#190e13', '#fff5f7', '#dd7899', '#0d0609']
 } as const
 
+type SurfacePalette = (typeof palettes)[keyof typeof palettes]
+
+function fluxSurfaceColors(palette: SurfacePalette) {
+  const rgb = [1, 3, 5].map((offset) => Number.parseInt(palette[3].slice(offset, offset + 2), 16) / 255)
+  const luminance = rgb.reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0)
+  return luminance > .55
+    ? { baseColor: '#FAFAFA', mistColor: '#FFFFFF' }
+    : { baseColor: palette[3], mistColor: palette[1] }
+}
+
 const previewSnapshot: IslandSnapshot = {
-  state: 'COMPACT',
+  state: surfaceParameter === 'panel' ? 'EXPANDED' : 'COMPACT',
+  compactMode: previewVariant === 'B' ? 'notification' : 'clock',
   settings: defaultSettings,
   now: new Date().toISOString()
 }
 
 const previewLauncherState: LauncherState = {
   setupCompleted: false,
-  entries: surfaceParameter === null ? [
+  entries: window.island ? [] : [
     { id: 'd194efb4-55a3-47dc-a2ef-c472caeb490c', kind: 'app', name: '文件资源管理器' },
     { id: '0130baba-18a9-4ebd-aa3a-3e4f70a0c804', kind: 'app', name: '记事本' },
     { id: '22f374f8-0a46-42e2-97cf-77f9ab2bb88d', kind: 'app', name: 'Visual Studio Code' },
     { id: '951bf1c1-938e-4863-8927-7555e47a80e0', kind: 'website', name: '工作台' }
-  ] : []
+  ]
+}
+
+const previewNotificationState: NotificationCenterState = {
+  accessStatus: 'disabled',
+  enabled: false,
+  suppression: 'accepts',
+  unreadCount: 2,
+  sources: [{ id: 'preview-feishu', name: '飞书', muted: false }],
+  desktopAdapters: [
+    { id: 'desktop:feishu', name: '飞书', status: 'waiting' },
+    { id: 'desktop:weixin', name: '微信', status: 'app-not-running' }
+  ],
+  items: [{
+    id: 'preview-notification',
+    platformId: 1,
+    appId: 'preview-feishu',
+    appName: '飞书',
+    title: '林墨',
+    body: '项目评审提前到 15:30，请看一下最新文档',
+    createdAt: new Date().toISOString(),
+    groupCount: 2,
+    unreadCount: 2
+  }]
 }
 
 const previewInstalledApps: InstalledAppCandidate[] = [
@@ -116,6 +181,19 @@ function useLauncherBridge(
   }, [setFeedback, setLauncherState])
 }
 
+function useNotificationBridge(
+  setState: React.Dispatch<React.SetStateAction<NotificationCenterState>>,
+  setFeedback: React.Dispatch<React.SetStateAction<Feedback>>
+) {
+  useEffect(() => {
+    if (!window.island) return
+    window.island.getNotificationState().then(setState).catch(() => {
+      setFeedback((current) => ({ message: '无法读取系统通知', sequence: current.sequence + 1 }))
+    })
+    return window.island.onNotificationState(setState)
+  }, [setFeedback, setState])
+}
+
 function formatDate(date: Date) {
   return `${date.getMonth() + 1}月${date.getDate()}日 星期${'日一二三四五六'[date.getDay()]}`
 }
@@ -125,84 +203,11 @@ function ShortcutIcon({ entry, size = 22 }: { entry: Pick<LauncherEntryView, 'ki
   return entry.kind === 'website' ? <Globe2 size={size} /> : <AppWindow size={size} />
 }
 
-function CloudEffects({ cloud }: { cloud: FluidCloudSettings }) {
+function CloudBackdrop({ cloud, palette, active = true }: { cloud: FluidCloudSettings; palette: SurfacePalette; active?: boolean }) {
+  const colors = fluxSurfaceColors(palette)
   return (
-    <span className="cloudEffects" aria-hidden>
-      {Array.from({ length: cloud.strands }, (_, index) => (
-        <span
-          className="cloudStrand"
-          key={`strand-${index}`}
-          style={{ '--cloud-index': index, '--cloud-count': cloud.strands } as React.CSSProperties}
-        />
-      ))}
-      {Array.from({ length: cloud.particles }, (_, index) => (
-        <span
-          className="cloudParticle"
-          key={`particle-${index}`}
-          style={{
-            '--cloud-index': index,
-            left: `${10 + (index * 37) % 80}%`,
-            top: `${3 + (index * 11) % 18}px`
-          } as React.CSSProperties}
-        />
-      ))}
-    </span>
-  )
-}
-
-function TriggerArtwork({
-  style,
-  cloud,
-  active = true,
-  pointerResponsive = true
-}: {
-  style: TriggerStyle
-  cloud: FluidCloudSettings
-  active?: boolean
-  pointerResponsive?: boolean
-}) {
-  if (!classicTriggerStyles.includes(style)) {
-    return (
-      <span className="triggerSkin canvasTriggerSkin" aria-hidden>
-        <TriggerCanvas cloud={cloud} active={active} pointerResponsive={pointerResponsive} />
-      </span>
-    )
-  }
-
-  if (style === 'liquid-ridge') {
-    return (
-      <span className="triggerSkin liquidRidge" aria-hidden>
-        <svg viewBox="0 0 212 30" preserveAspectRatio="none">
-          <path className="liquidBody" d="M0 0H212V5C176 5 158 6 142 11C126 16 122 27 106 28C90 27 86 16 70 11C54 6 36 5 0 5Z" />
-          <path className="liquidEdge" d="M0 5C36 5 54 6 70 11C86 16 90 27 106 28C122 27 126 16 142 11C158 6 176 5 212 5" />
-          <path className="liquidCurrent liquidCurrentRear" d="M40 5C70 5 82 10 94 17C101 21 105 22 112 20C124 17 132 9 166 5" />
-          <path className="liquidCurrent liquidCurrentFront" d="M58 6C79 8 88 17 99 21C107 24 116 21 124 16C133 10 145 6 158 6" />
-        </svg>
-        <span className="liquidSeam" />
-        <CloudEffects cloud={cloud} />
-      </span>
-    )
-  }
-
-  if (style === 'magnetic-rail') {
-    return (
-      <span className="triggerSkin magneticRail" aria-hidden>
-        <span className="magneticTrack magneticTrackLeft"><span /></span>
-        <span className="magneticCore"><span className="magneticEnergy" /></span>
-        <span className="magneticTrack magneticTrackRight"><span /></span>
-        <span className="magneticTongue" />
-        <CloudEffects cloud={cloud} />
-      </span>
-    )
-  }
-
-  return (
-    <span className="triggerSkin edgeDock" aria-hidden>
-      <span className="dockRail" />
-      <span className="dockPulse dockPulseLeft" />
-      <span className="dockPulse dockPulseRight" />
-      <span className="dockCore"><span /></span>
-      <CloudEffects cloud={cloud} />
+    <span className="cloudBackdrop" aria-hidden>
+      <FluxCanvas cloud={cloud} active={active} className="cloudBackdropArt" {...colors} />
     </span>
   )
 }
@@ -211,16 +216,14 @@ function cloudFromPreset(style: TriggerStyle): FluidCloudSettings {
   const preset = triggerPresets[style]
   return {
     shape: style,
-    color: preset.color,
-    strands: preset.strands,
-    particles: preset.particles,
+    color: preset.colors[0],
+    secondaryColor: preset.colors[1],
+    tertiaryColor: preset.colors[2],
     speed: preset.speed,
     response: preset.response,
-    widthScale: 1,
-    heightScale: 1,
-    depth: 1,
-    curvature: .55,
-    symmetry: 1
+    noiseScale: preset.noiseScale,
+    depth: preset.depth,
+    curvature: preset.curvature
   }
 }
 
@@ -289,20 +292,55 @@ function sameCloud(left: FluidCloudSettings | null, right: FluidCloudSettings) {
   return Boolean(left) && JSON.stringify(left) === JSON.stringify(right)
 }
 
+function NotificationIcon({ item }: { item: { icon?: string; name: string; appName?: string } }) {
+  if (item.icon) return <img src={item.icon} alt="" />
+  return <span>{(item.appName ?? item.name).slice(0, 1)}</span>
+}
+
+function NotificationPreview({ state, settings }: { state: NotificationCenterState; settings: IslandSettings }) {
+  const item = state.items[0]
+  if (!item) return null
+  const palette = palettes[settings.theme]
+  return (
+    <button
+      className="notificationPreview capsuleNotification"
+      type="button"
+      onMouseEnter={() => window.island?.setNotificationPreviewHovered(true)}
+      onMouseLeave={() => window.island?.setNotificationPreviewHovered(false)}
+      onClick={() => window.island?.openPanel('notifications')}
+      aria-label={`打开 ${item.appName} 通知`}
+    >
+      <CloudBackdrop cloud={settings.fluidCloud} palette={palette} />
+      <span className="notificationAppIcon"><NotificationIcon item={{ ...item, name: item.appName }} /></span>
+      <span className="notificationCopy">
+        <span><b>{item.title || item.appName}</b><small>{item.appName}</small></span>
+        {settings.showNotificationPreview && <em>{item.body || '收到一条新通知'}</em>}
+      </span>
+      {item.groupCount > 1 && <span className="notificationCount">+{item.groupCount - 1}</span>}
+    </button>
+  )
+}
+
+const fluxPreviewSurfaces = {
+  compact: { label: '紧凑岛', width: 148, height: 40, previewWidth: 296 },
+  notification: { label: '通知胶囊', width: 430, height: 68, previewWidth: 430 },
+  panel: { label: '面板顶部', width: 640, height: 28, previewWidth: 560 }
+} as const
+type FluxPreviewSurface = keyof typeof fluxPreviewSurfaces
+
 function CloudStudio({
   settings,
   onCloudChange,
-  onSettingsChange,
   onCreationsChange,
   notify
 }: {
   settings: IslandSettings
   onCloudChange: (patch: Partial<FluidCloudSettings>) => void
-  onSettingsChange: (patch: Partial<IslandSettings>) => void
   onCreationsChange: (creations: FluidCloudCreation[]) => Promise<boolean>
   notify: (message: string) => void
 }) {
   const { fluidCloud: cloud, fluidCloudCreations: creations } = settings
+  const fluxColors = fluxSurfaceColors(palettes[settings.theme])
   const [category, setCategory] = useState(triggerPresets[cloud.shape].category)
   const [creationName, setCreationName] = useState(`${triggerPresets[cloud.shape].name} 自定义`.slice(0, 24))
   const [activeCreationId, setActiveCreationId] = useState<string | null>(null)
@@ -310,13 +348,13 @@ function CloudStudio({
   const [undoStack, setUndoStack] = useState<FluidCloudSettings[]>([])
   const [redoStack, setRedoStack] = useState<FluidCloudSettings[]>([])
   const [saving, setSaving] = useState(false)
+  const [previewSurface, setPreviewSurface] = useState<FluxPreviewSurface>('compact')
   const cloudRef = useRef(cloud)
   const editStart = useRef<FluidCloudSettings | null>(null)
   cloudRef.current = cloud
   const visiblePresets = triggerStyles.filter((style) => triggerPresets[style].category === category)
   const activePreset = triggerPresets[cloud.shape]
-  const artWidth = Math.round(activePreset.width * cloud.widthScale)
-  const artHeight = Math.round(activePreset.height * cloud.heightScale)
+  const preview = fluxPreviewSurfaces[previewSurface]
   const activeCreation = creations.find((creation) => creation.id === activeCreationId)
   const dirty = !sameCloud(savedCloud, cloud) || (activeCreation ? activeCreation.name !== creationName.trim() : true)
 
@@ -346,13 +384,16 @@ function CloudStudio({
 
   const selectPreset = (style: TriggerStyle) => {
     setCategory(triggerPresets[style].category)
-    setActiveCreationId(null)
-    setSavedCloud(null)
-    setCreationName(`${triggerPresets[style].name} 自定义`.slice(0, 24))
     applyCloud(cloudFromPreset(style))
   }
 
   const loadCreation = (creation: FluidCloudCreation) => {
+    if (activeCreationId === creation.id) return
+    if (
+      activeCreationId
+      && dirty
+      && !window.confirm(`当前方案“${activeCreation?.name ?? creationName}”有未保存修改，放弃修改并载入“${creation.name}”？`)
+    ) return
     setCategory(triggerPresets[creation.cloud.shape].category)
     setActiveCreationId(creation.id)
     setCreationName(creation.name)
@@ -360,11 +401,17 @@ function CloudStudio({
     applyCloud(creation.cloud)
   }
 
-  const saveCreation = async (saveAs = false) => {
+  const startNewCreation = () => {
+    setActiveCreationId(null)
+    setSavedCloud(null)
+    setCreationName(`${triggerPresets[cloudRef.current.shape].name} 自定义`.slice(0, 24))
+  }
+
+  const saveCreation = async () => {
     const name = creationName.trim()
-    if (!name) return notify('请输入作品名称')
-    const createNew = saveAs || !activeCreationId
-    if (createNew && creations.length >= 32) return notify('作品库最多保存 32 个作品')
+    if (!name) return notify('请输入方案名称')
+    const createNew = !activeCreationId
+    if (createNew && creations.length >= 32) return notify('方案目录最多保存 32 个方案')
     const id = createNew ? crypto.randomUUID() : activeCreationId
     const nextCreation = { id, name, cloud: { ...cloudRef.current } }
     const nextCreations = createNew
@@ -380,7 +427,7 @@ function CloudStudio({
   }
 
   const duplicateCreation = async (creation: FluidCloudCreation) => {
-    if (creations.length >= 32) return notify('作品库最多保存 32 个作品')
+    if (creations.length >= 32) return notify('方案目录最多保存 32 个方案')
     const name = `${creation.name} 副本`.slice(0, 24)
     if (await onCreationsChange([...creations, { id: crypto.randomUUID(), name, cloud: { ...creation.cloud } }])) {
       notify(`已复制“${creation.name}”`)
@@ -388,7 +435,7 @@ function CloudStudio({
   }
 
   const renameCreation = async (creation: FluidCloudCreation) => {
-    const name = window.prompt('输入新的作品名称', creation.name)?.trim()
+    const name = window.prompt('输入新的方案名称', creation.name)?.trim()
     if (!name || name.length > 24) return
     if (await onCreationsChange(creations.map((item) => item.id === creation.id ? { ...item, name } : item))) {
       if (activeCreationId === creation.id) setCreationName(name)
@@ -435,17 +482,16 @@ function CloudStudio({
           <h1>流云创作器</h1>
         </div>
         <div className="studioToolbar">
-          <div className="studioCurrent"><span style={{ background: cloud.color }} />{activePreset.name}</div>
+          <div className="studioCurrent"><span style={{ background: `linear-gradient(135deg, ${cloud.color}, ${cloud.secondaryColor}, ${cloud.tertiaryColor})` }} />{activePreset.name}</div>
           <label className="studioName">
             <span className={dirty ? 'dirty' : ''}>{dirty ? '未保存' : '已保存'}</span>
-            <input aria-label="作品名称" value={creationName} maxLength={24} onChange={(event) => setCreationName(event.target.value)} />
+            <input aria-label="方案名称" value={creationName} maxLength={24} onChange={(event) => setCreationName(event.target.value)} />
           </label>
           <div className="studioHistory">
             <button type="button" onClick={undo} disabled={!undoStack.length} aria-label="撤销" title="撤销"><Undo2 size={15} /></button>
             <button type="button" onClick={redo} disabled={!redoStack.length} aria-label="重做" title="重做"><Redo2 size={15} /></button>
           </div>
-          <button className="studioSaveButton" type="button" disabled={saving || !dirty} onClick={() => void saveCreation(false)}><Save size={14} />保存</button>
-          <button className="studioSaveAsButton" type="button" disabled={saving} onClick={() => void saveCreation(true)}>另存为</button>
+          <button className="studioSaveButton" type="button" disabled={saving || !dirty} onClick={() => void saveCreation()}><Save size={14} />保存</button>
         </div>
       </header>
 
@@ -461,9 +507,13 @@ function CloudStudio({
             )
           })}
         </nav>
-        <div className="studioLibraryTitle"><FolderOpen size={14} />我的作品 <b>{creations.length}/32</b></div>
+        <div className="studioLibraryTitle">
+          <FolderOpen size={14} />方案目录
+          <b>{creations.length}/32</b>
+          <button type="button" onClick={startNewCreation} title="新建方案"><Plus size={12} />新建</button>
+        </div>
         <div className="studioWorks">
-          {creations.length === 0 ? <p>保存当前设计后会出现在这里。</p> : creations.map((creation) => (
+          {creations.length === 0 ? <p>新建并保存方案后会出现在这里。</p> : creations.map((creation) => (
             <div className="studioWork" key={creation.id}>
               <button className={activeCreationId === creation.id ? 'active' : ''} type="button" onClick={() => loadCreation(creation)} title={`载入 ${creation.name}`}>
                 <span style={{ background: creation.cloud.color }} />{creation.name}
@@ -481,20 +531,26 @@ function CloudStudio({
       <section className="studioWorkspace">
         <div className="studioPreview" aria-label="流云实时预览">
           <div className="studioGrid" />
-          <div className="studioPreviewArt" style={{ width: `min(92%, ${artWidth}px)`, height: artHeight }}>
-            <TriggerArtwork style={cloud.shape} cloud={cloud} pointerResponsive={false} />
+          <div className="studioPreviewModes" aria-label="预览比例">
+            {(Object.keys(fluxPreviewSurfaces) as FluxPreviewSurface[]).map((surface) => (
+              <button className={previewSurface === surface ? 'active' : ''} key={surface} type="button" onClick={() => setPreviewSurface(surface)}>{fluxPreviewSurfaces[surface].label}</button>
+            ))}
           </div>
-          <div className="studioPreviewMeta"><span>实时画布</span><b>{artWidth} × {artHeight}</b></div>
+          <div className={`studioPreviewArt preview-${previewSurface}`} style={{ width: `min(92%, ${preview.previewWidth}px)`, aspectRatio: `${preview.width} / ${preview.height}` }}>
+            <FluxCanvas cloud={cloud} {...fluxColors} />
+          </div>
+          <div className="studioPreviewMeta"><span>实时 WebGL</span><b>{preview.width} × {preview.height}</b></div>
         </div>
-        <div className="presetHeader"><h2>{triggerPresetCategories.find((item) => item.id === category)?.name}</h2><span>{visiblePresets.length} 款唯一动效</span></div>
+        <div className="presetHeader"><h2>{triggerPresetCategories.find((item) => item.id === category)?.name}</h2><span>{visiblePresets.length} 组三色配色</span></div>
         <div className="presetGrid">
+          {/* ponytail: categories currently cap at 9 thumbnail contexts; use one shared canvas with Scissor Test if that ceiling grows. */}
           {visiblePresets.map((style) => {
             const presetCloud = cloudFromPreset(style)
             return (
               <button className={`presetCard ${cloud.shape === style ? 'active' : ''}`} key={style} type="button" onClick={() => selectPreset(style)}>
-                <span className="presetArt"><TriggerArtwork style={style} cloud={presetCloud} active={false} /></span>
+                <span className="presetArt"><FluxCanvas cloud={presetCloud} active={false} animated={false} interactive={false} {...fluxColors} /></span>
                 <span className="presetName">{triggerPresets[style].name}</span>
-                <span className="presetSize">{triggerPresets[style].width} × {triggerPresets[style].height}</span>
+                <span className="presetSize">FLUX</span>
               </button>
             )
           })}
@@ -503,30 +559,137 @@ function CloudStudio({
 
       <aside className="studioInspector">
         <div className="inspectorHeader"><span>参数检查器</span><button type="button" onClick={() => selectPreset(cloud.shape)}><RotateCcw size={14} />恢复默认</button></div>
-        <div className="studioColorField">
-          <span>主色</span>
-          <input type="color" value={cloud.color} onFocus={beginEdit} onBlur={endEdit} onChange={(event) => applyCloud({ color: event.target.value }, false)} />
-          <output>{cloud.color.toUpperCase()}</output>
+        <div className="studioColorFields">
+          {([
+            ['主色', 'color'],
+            ['辅色', 'secondaryColor'],
+            ['点缀色', 'tertiaryColor']
+          ] as const).map(([label, key]) => (
+            <label className="studioColorField" key={key}>
+              <span>{label}</span>
+              <input type="color" value={cloud[key]} onFocus={beginEdit} onBlur={endEdit} onChange={(event) => applyCloud({ [key]: event.target.value }, false)} />
+              <output>{cloud[key].toUpperCase()}</output>
+            </label>
+          ))}
         </div>
-        <div className="inspectorGroup"><h3>几何<button type="button" onClick={() => applyCloud({ widthScale: 1, heightScale: 1, depth: 1, curvature: .55, symmetry: 1 })}>重置</button></h3>
-          <RangeField label="宽度" value={artWidth} min={Math.round(activePreset.width * .7)} max={Math.round(activePreset.width * 1.3)} step={1} display={`${artWidth}px`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(width) => applyCloud({ widthScale: Math.max(.7, Math.min(1.3, width / activePreset.width)) }, false)} />
-          <RangeField label="视觉高度" value={artHeight} min={Math.round(activePreset.height * .6)} max={Math.round(activePreset.height * 1.6)} step={1} display={`${artHeight}px`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(height) => applyCloud({ heightScale: Math.max(.6, Math.min(1.6, height / activePreset.height)) }, false)} />
-          <RangeField label="深度" value={cloud.depth} min={.5} max={1.5} step={.05} display={`${Math.round(cloud.depth * 100)}%`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(depth) => applyCloud({ depth }, false)} />
-          <RangeField label="曲率" value={cloud.curvature} min={0} max={1} step={.05} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(curvature) => applyCloud({ curvature }, false)} />
-          <RangeField label="对称" value={cloud.symmetry} min={0} max={1} step={.05} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(symmetry) => applyCloud({ symmetry }, false)} />
-        </div>
-        <div className="inspectorGroup"><h3>动态<button type="button" onClick={() => applyCloud({ strands: activePreset.strands, particles: activePreset.particles, speed: activePreset.speed, response: activePreset.response })}>重置</button></h3>
-          <RangeField label="光丝数量" value={cloud.strands} min={1} max={8} step={1} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(strands) => applyCloud({ strands }, false)} />
-          <RangeField label="粒子数量" value={cloud.particles} min={0} max={16} step={1} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(particles) => applyCloud({ particles }, false)} />
-          <RangeField label="速度" value={cloud.speed} min={.25} max={2} step={.05} display={`${cloud.speed.toFixed(2)}×`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(speed) => applyCloud({ speed }, false)} />
-          <RangeField label="响应" value={cloud.response} min={.2} max={1.5} step={.05} display={`${cloud.response.toFixed(2)}×`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(response) => applyCloud({ response }, false)} />
-        </div>
-        <div className="inspectorGroup"><h3>交互</h3>
-          <RangeField label="顶部触发宽度" value={settings.triggerWidth} min={120} max={800} step={10} display={`${settings.triggerWidth}px`} onChange={(triggerWidth) => onSettingsChange({ triggerWidth })} />
-          <RangeField label="顶部触发高度" value={settings.triggerHeight} min={2} max={20} step={1} display={`${settings.triggerHeight}px`} onChange={(triggerHeight) => onSettingsChange({ triggerHeight })} />
-          <RangeField label="智能隐藏延迟" value={settings.hideDelayMs} min={300} max={3000} step={100} display={`${settings.hideDelayMs}ms`} onChange={(hideDelayMs) => onSettingsChange({ hideDelayMs })} />
+        <div className="inspectorGroup"><h3>FLUX 材质<button type="button" onClick={() => applyCloud(cloudFromPreset(cloud.shape))}>重置</button></h3>
+          <RangeField label="流速" value={cloud.speed} min={.25} max={2} step={.05} display={`${cloud.speed.toFixed(2)}×`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(speed) => applyCloud({ speed }, false)} />
+          <RangeField label="噪声尺度" value={cloud.noiseScale} min={.5} max={3} step={.05} display={cloud.noiseScale.toFixed(2)} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(noiseScale) => applyCloud({ noiseScale }, false)} />
+          <RangeField label="Warp 强度" value={cloud.curvature} min={0} max={1} step={.05} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(curvature) => applyCloud({ curvature }, false)} />
+          <RangeField label="色彩密度" value={cloud.depth} min={.5} max={1.5} step={.05} display={`${Math.round(cloud.depth * 100)}%`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(depth) => applyCloud({ depth }, false)} />
+          <RangeField label="交互响应" value={cloud.response} min={.2} max={1.5} step={.05} display={`${cloud.response.toFixed(2)}×`} onEditStart={beginEdit} onEditEnd={endEdit} onChange={(response) => applyCloud({ response }, false)} />
         </div>
       </aside>
+    </div>
+  )
+}
+
+function GeneralSettings({
+  settings,
+  notificationState,
+  onSettingsChange,
+  onRequestNotificationAccess,
+  notify
+}: {
+  settings: IslandSettings
+  notificationState: NotificationCenterState
+  onSettingsChange: (patch: Partial<IslandSettings>) => void
+  onRequestNotificationAccess: () => void
+  notify: (message: string) => void
+}) {
+  return (
+    <div className="generalSettingsShell">
+      <header className="generalSettingsHeader">
+        <span><Settings size={22} /></span>
+        <div><small>WINDOWS DYNAMIC ISLAND</small><h1>通用设置</h1><p>管理灵动岛行为、系统通知和剪贴板归档。</p></div>
+      </header>
+      <div className="generalSettingsBody">
+        <section className="settingsCard inspectorGroup"><h3>灵动岛行为</h3>
+          <div className="shortcutSummary"><span><b>全局快捷键</b><small>在任意程序中显示紧凑岛</small></span><kbd>Ctrl + Alt + Space</kbd></div>
+          <RangeField label="智能隐藏延迟" value={settings.hideDelayMs} min={300} max={3000} step={100} display={`${settings.hideDelayMs}ms`} onChange={(hideDelayMs) => onSettingsChange({ hideDelayMs })} />
+        </section>
+
+        <section className="settingsCard inspectorGroup notificationSettings"><h3>系统通知</h3>
+          <label className="notificationToggle">
+            <span><b>监听通知中心</b><small>{notificationState.accessStatus === 'allowed' ? '已授权' : notificationState.accessStatus === 'denied' ? '已拒绝' : '未启用'}</small></span>
+            <input
+              type="checkbox"
+              checked={settings.notificationsEnabled}
+              onChange={(event) => {
+                if (event.target.checked) onRequestNotificationAccess()
+                else onSettingsChange({ notificationsEnabled: false })
+              }}
+            />
+          </label>
+          <label className="notificationToggle compactToggle">
+            <span><b>显示消息摘要</b><small>关闭后只显示发送者</small></span>
+            <input type="checkbox" checked={settings.showNotificationPreview} onChange={(event) => onSettingsChange({ showNotificationPreview: event.target.checked })} />
+          </label>
+          <label className="notificationToggle compactToggle">
+            <span><b>微信/飞书桌面弹窗</b><small>仅读取新弹窗，内容只驻留内存</small></span>
+            <input
+              type="checkbox"
+              disabled={!settings.notificationsEnabled}
+              checked={settings.desktopPopupNotificationsEnabled}
+              onChange={(event) => onSettingsChange({ desktopPopupNotificationsEnabled: event.target.checked })}
+            />
+          </label>
+          {settings.desktopPopupNotificationsEnabled && (
+            <div className="desktopAdapterStatuses">
+              {notificationState.desktopAdapters.map((adapter) => (
+                <span key={adapter.id}>
+                  <i className={`statusDot ${adapter.status}`} />
+                  <b>{adapter.name}</b>
+                  <small>{({
+                    disabled: '未启用',
+                    'app-not-running': '客户端未运行',
+                    waiting: '等待通知弹窗',
+                    capturing: '已捕获弹窗',
+                    'integrity-mismatch': '权限级别不一致',
+                    error: '监听异常'
+                  })[adapter.status]}</small>
+                </span>
+              ))}
+              <p>请在客户端开启新消息弹窗；飞书：头像 → 设置 → 通知。</p>
+            </div>
+          )}
+          {notificationState.sources.length > 0 && (
+            <div className="notificationSources">
+              <span>按来源屏蔽</span>
+              {notificationState.sources.map((source) => (
+                <label key={source.id}>
+                  <i><NotificationIcon item={source} /></i><b>{source.name}</b>
+                  <input
+                    type="checkbox"
+                    checked={!source.muted}
+                    onChange={(event) => onSettingsChange({
+                      mutedNotificationApps: event.target.checked
+                        ? settings.mutedNotificationApps.filter((item) => item.id !== source.id)
+                        : [...settings.mutedNotificationApps.filter((item) => item.id !== source.id), { id: source.id, name: source.name }]
+                    })}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+          {notificationState.accessStatus === 'denied' && <button className="notificationSettingsLink" type="button" onClick={() => window.island?.openNotificationSettings()}>打开 Windows 权限设置</button>}
+        </section>
+
+        <section className="settingsCard inspectorGroup clipboardArchiveSettings"><h3>剪贴板归档</h3>
+          <label className="notificationToggle">
+            <span><b>自动保存复制内容</b><small>记录所有剪贴板变化，可能包含敏感信息</small></span>
+            <input type="checkbox" checked={settings.clipboardArchiveEnabled} onChange={(event) => onSettingsChange({ clipboardArchiveEnabled: event.target.checked })} />
+          </label>
+          <button
+            className="clipboardArchiveDirectory"
+            type="button"
+            onClick={() => window.island?.openClipboardArchiveDirectory().catch(() => notify('剪贴板记录目录打开失败'))}
+          >
+            <FolderOpen size={13} />
+            <span><b>打开保存目录</b><small>文档\Windows灵动岛\剪贴板记录</small></span>
+          </button>
+        </section>
+      </div>
     </div>
   )
 }
@@ -836,29 +999,81 @@ function LauncherManager({ state, onStateChange, notify }: LauncherManagerProps)
   )
 }
 
+function NotificationPanelContent({
+  state,
+  settings,
+  onEnable,
+  onDismiss,
+  onClear
+}: {
+  state: NotificationCenterState
+  settings: IslandSettings
+  onEnable: () => void
+  onDismiss: () => void
+  onClear: () => void
+}) {
+  if (!settings.notificationsEnabled && !settings.notificationOnboardingDismissed) {
+    return (
+      <div className="notificationOnboarding">
+        <span><Bell size={22} /></span>
+        <div><b>让通知在顶部轻轻出现</b><p>启用后读取 Windows 通知中心；消息只保存在本次运行内。</p></div>
+        <button type="button" onClick={onEnable}>启用</button>
+        <button className="quiet" type="button" onClick={onDismiss}>稍后</button>
+      </div>
+    )
+  }
+
+  if (settings.notificationsEnabled && ['denied', 'unavailable', 'error'].includes(state.accessStatus)) {
+    return (
+      <div className="notificationOnboarding denied">
+        <span><BellOff size={22} /></span>
+        <div><b>{state.accessStatus === 'denied' ? 'Windows 已拒绝通知访问' : '通知桥接暂不可用'}</b><p>可在系统隐私设置中重新授权，不会影响其他灵动岛功能。</p></div>
+        <button type="button" onClick={() => window.island?.openNotificationSettings()}>打开设置</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="notificationPanelContent">
+      <div className="notificationListHeader">
+        <span>{state.items.length ? `${state.items.length} 条通知` : '通知中心'}</span>
+        {state.items.length > 0 && <button type="button" onClick={onClear}>清空本地</button>}
+      </div>
+      <div className="notificationList">
+        {state.items.length ? state.items.map((item) => (
+          <button type="button" key={item.id} onClick={() => window.island?.openNotificationSource(item.appId)}>
+            <span className="notificationAppIcon"><NotificationIcon item={{ ...item, name: item.appName }} /></span>
+            <span className="notificationListCopy">
+              <span><b>{item.title || item.appName}</b><small>{new Date(item.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}</small></span>
+              <em>{settings.showNotificationPreview ? (item.body || '收到一条新通知') : item.appName}</em>
+            </span>
+            {item.groupCount > 1 && <span className="notificationCount">+{item.groupCount - 1}</span>}
+          </button>
+        )) : <div className="notificationEmpty"><Bell size={22} /><span>新通知会出现在这里</span></div>}
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [snapshot, setSnapshot] = useState(previewSnapshot)
   const [launcherState, setLauncherState] = useState(previewLauncherState)
+  const [notificationState, setNotificationState] = useState(previewNotificationState)
+  const [panelView, setPanelView] = useState<'launcher' | 'notifications'>('launcher')
   const [feedback, setFeedback] = useState<Feedback>({ message: '', sequence: 0 })
-  const [pullDistance, setPullDistance] = useState(0)
-  const [gestureActive, setGestureActive] = useState(false)
-  const [gestureMode, setGestureMode] = useState<TriggerGestureAxis | null>(null)
-  const pointerStart = useRef<{ x: number; y: number } | null>(null)
-  const gestureAxis = useRef<TriggerGestureAxis | null>(null)
-  const pullTravel = useRef(0)
   const settingsSaveTimer = useRef<number | null>(null)
   const pendingSettingsPatch = useRef<Partial<IslandSettings>>({})
   const settingsRef = useRef(snapshot.settings)
   settingsRef.current = snapshot.settings
   useBridge(setSnapshot, setFeedback)
   useLauncherBridge(setLauncherState, setFeedback)
+  useNotificationBridge(setNotificationState, setFeedback)
+
+  useEffect(() => window.island?.onPanelView(setPanelView), [])
 
   useEffect(() => {
-    if (requestedSurface !== 'trigger') return
-    return window.island?.onTriggerVisualLayout((layout) => {
-      if (!pointerStart.current) setPullDistance(layout.pullDistance)
-    })
-  }, [])
+    if (requestedSurface === 'panel' && panelView === 'notifications') void window.island?.markNotificationsRead()
+  }, [panelView])
 
   useEffect(() => {
     if (!feedback.message) return
@@ -876,24 +1091,19 @@ function App() {
   }, [])
 
   const panelState = ['EXPANDED', 'SETTINGS_OPEN'].includes(snapshot.state)
-  const triggerVisible = snapshot.state === 'TRIGGER_VISIBLE'
-  const surface: RendererSurface = requestedSurface === 'creator' || requestedSurface === 'launcher'
+  const surface: RendererSurface = requestedSurface === 'creator' || requestedSurface === 'settings' || requestedSurface === 'launcher'
     ? requestedSurface
-    : requestedSurface ?? (triggerVisible ? 'trigger' : panelState ? 'panel' : 'compact')
-  const surfaceActive = surface === 'creator' || surface === 'launcher'
+    : requestedSurface ?? (panelState ? 'panel' : 'compact')
+  const surfaceActive = surface === 'creator' || surface === 'settings' || surface === 'launcher'
     ? true
     : requestedSurface
-      ? isSurfaceActive(surface, snapshot.state)
+      ? snapshot.compactMode === 'notification' || isSurfaceActive(surface, snapshot.state)
     : snapshot.state !== 'HIDDEN'
   const palette = palettes[snapshot.settings.theme]
   const date = new Date(snapshot.now)
   const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
 
   const notify = (message: string) => setFeedback((current) => ({ message, sequence: current.sequence + 1 }))
-  const setSettingsOpen = (open: boolean) => {
-    if (window.island) window.island.setSettingsOpen(open)
-    else setSnapshot((current) => ({ ...current, state: open ? 'SETTINGS_OPEN' : 'EXPANDED' }))
-  }
   const launchShortcut = async (entry: LauncherEntryView) => {
     try {
       if (window.island) await window.island.launchShortcut(entry.id)
@@ -928,6 +1138,14 @@ function App() {
     setSnapshot((current) => ({ ...current, settings: { ...current.settings, ...patch } }))
     queueSettingsSave(patch)
   }
+  const requestNotificationAccess = () => {
+    updateGeneralSettings({ notificationsEnabled: true, notificationOnboardingDismissed: true })
+    if (window.island) {
+      window.island.requestNotificationAccess().then(setNotificationState).catch(() => notify('无法请求 Windows 通知权限'))
+    } else {
+      setNotificationState((current) => ({ ...current, enabled: true, accessStatus: 'allowed' }))
+    }
+  }
   const updateCreations = async (fluidCloudCreations: FluidCloudCreation[]) => {
     const previous = settingsRef.current.fluidCloudCreations
     settingsRef.current = { ...settingsRef.current, fluidCloudCreations }
@@ -939,7 +1157,7 @@ function App() {
     } catch {
       settingsRef.current = { ...settingsRef.current, fluidCloudCreations: previous }
       setSnapshot((current) => ({ ...current, settings: { ...current.settings, fluidCloudCreations: previous } }))
-      notify('作品库保存失败')
+      notify('方案目录保存失败')
       return false
     }
   }
@@ -947,60 +1165,9 @@ function App() {
     if (window.island) window.island.setExpanded(expanded)
     else setSnapshot((current) => ({ ...current, state: expanded ? 'EXPANDED' : 'COMPACT' }))
   }
-  const resetGesture = () => {
-    pointerStart.current = null
-    gestureAxis.current = null
-    pullTravel.current = 0
-    setGestureActive(false)
-    setGestureMode(null)
-    setPullDistance(0)
-    window.island?.setTriggerPull(0)
-  }
-  const updatePull = (deltaY: number) => {
-    const pull = Math.max(0, Math.min(8, deltaY))
-    const travel = Math.max(pullTravel.current, Math.abs(deltaY))
-    pullTravel.current = travel
-    setPullDistance(pull)
-    window.island?.setTriggerPull(pull)
-    return { pull, travel }
-  }
-  const updateGesture = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!pointerStart.current) return
-    const deltaX = event.screenX - pointerStart.current.x
-    const deltaY = event.screenY - pointerStart.current.y
-    if (!gestureAxis.current) {
-      gestureAxis.current = resolveTriggerGestureAxis(deltaX, deltaY)
-      setGestureMode(gestureAxis.current)
-      if (gestureAxis.current === 'horizontal') window.island?.moveTrigger('start', pointerStart.current.x)
-    }
-    if (gestureAxis.current === 'horizontal') {
-      setPullDistance(0)
-      window.island?.setTriggerPull(0)
-      window.island?.moveTrigger('move', event.screenX)
-    } else if (gestureAxis.current === 'vertical') {
-      updatePull(deltaY)
-    }
-  }
-  const finishGesture = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!pointerStart.current) return
-    const deltaX = event.screenX - pointerStart.current.x
-    const deltaY = event.screenY - pointerStart.current.y
-    const axis = gestureAxis.current ?? resolveTriggerGestureAxis(deltaX, deltaY)
-    if (axis === 'horizontal' && !gestureAxis.current) window.island?.moveTrigger('start', pointerStart.current.x)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-    if (axis === 'horizontal') {
-      window.island?.moveTrigger('end', event.screenX)
-      resetGesture()
-      return
-    }
-    const gesture = updatePull(deltaY)
-    resetGesture()
-    if (shouldRevealFromTrigger(gesture.pull, Math.max(gesture.travel, Math.abs(deltaX)))) setExpanded(false)
-  }
-
   return (
     <main
-      className={`stage surface-${surface} ${surfaceActive ? 'isActive' : 'isInactive'}`}
+      className={`stage surface-${surface} ${surfaceActive ? 'isActive' : 'isInactive'} compact-mode-${snapshot.compactMode}`}
       style={{
         '--bg': palette[0],
         '--fg': palette[1],
@@ -1008,13 +1175,13 @@ function App() {
         '--panel': palette[3],
         '--alpha': snapshot.settings.opacity,
         '--cloud-color': snapshot.settings.fluidCloud.color,
+        '--cloud-secondary-color': snapshot.settings.fluidCloud.secondaryColor,
+        '--cloud-tertiary-color': snapshot.settings.fluidCloud.tertiaryColor,
         '--cloud-speed': snapshot.settings.fluidCloud.speed,
         '--cloud-response': snapshot.settings.fluidCloud.response,
+        '--cloud-noise-scale': snapshot.settings.fluidCloud.noiseScale,
         '--cloud-depth': snapshot.settings.fluidCloud.depth,
-        '--cloud-curvature': snapshot.settings.fluidCloud.curvature,
-        '--cloud-symmetry': snapshot.settings.fluidCloud.symmetry,
-        '--pull-distance': `${pullDistance}px`,
-        '--pull-scale': 1 + pullDistance / 30
+        '--cloud-curvature': snapshot.settings.fluidCloud.curvature
       } as React.CSSProperties}
     >
       <section className="surfaceFrame">
@@ -1022,56 +1189,48 @@ function App() {
           <CloudStudio
             settings={snapshot.settings}
             onCloudChange={updateFluidCloud}
-            onSettingsChange={updateGeneralSettings}
             onCreationsChange={updateCreations}
+            notify={notify}
+          />
+        ) : surface === 'settings' ? (
+          <GeneralSettings
+            settings={snapshot.settings}
+            notificationState={notificationState}
+            onSettingsChange={updateGeneralSettings}
+            onRequestNotificationAccess={requestNotificationAccess}
             notify={notify}
           />
         ) : surface === 'launcher' ? (
           <LauncherManager state={launcherState} onStateChange={setLauncherState} notify={notify} />
-        ) : surface === 'trigger' ? (
-          <button
-            className={`triggerControl style-${snapshot.settings.fluidCloud.shape} ${gestureActive ? 'is-dragging' : ''} ${gestureMode ? `gesture-${gestureMode}` : ''}`}
-            type="button"
-            aria-label="点击、下拉或横向拖动灵动岛"
-            onClick={(event) => { if (event.detail === 0) setExpanded(false) }}
-            onPointerDown={(event) => {
-              if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
-              pointerStart.current = { x: event.screenX, y: event.screenY }
-              gestureAxis.current = null
-              pullTravel.current = 0
-              setGestureActive(true)
-              setGestureMode(null)
-              setPullDistance(0)
-              window.island?.setTriggerPull(0)
-              event.currentTarget.setPointerCapture(event.pointerId)
-            }}
-            onPointerMove={updateGesture}
-            onPointerUp={finishGesture}
-            onPointerCancel={() => {
-              if (gestureAxis.current === 'horizontal') window.island?.moveTrigger('cancel', 0)
-              resetGesture()
-            }}
-          >
-            <span className="triggerArtworkMotion">
-              <TriggerArtwork style={snapshot.settings.fluidCloud.shape} cloud={snapshot.settings.fluidCloud} active={surfaceActive} />
-            </span>
-          </button>
         ) : surface === 'compact' ? (
+          snapshot.compactMode === 'notification' ? (
+            <NotificationPreview state={notificationState} settings={snapshot.settings} />
+          ) : (
             <button className="compact" type="button" onClick={() => setExpanded(true)} aria-label="展开灵动岛">
-              <span className="compactHalo" aria-hidden /><time>{time}</time><span className="pulse" />
+              <CloudBackdrop cloud={snapshot.settings.fluidCloud} palette={palette} active={surfaceActive} />
+              <time>{time}</time><span className="pulse" />
+              {notificationState.unreadCount > 0 && <span className={`islandUnreadDot ${notificationState.suppression !== 'accepts' ? 'quiet' : ''}`} aria-label={`${notificationState.unreadCount} 条未读通知`} />}
             </button>
+          )
         ) : (
           <div className="panel">
             <div className="dashboardPanel">
                 <div className="panelChrome">
-                  <span className="liveStatus"><Waves size={15} strokeWidth={2} />灵动中心</span>
+                  <CloudBackdrop cloud={snapshot.settings.fluidCloud} palette={palette} active={surfaceActive} />
+                  <div className="panelTabs" role="tablist" aria-label="灵动中心页面">
+                    <button className={panelView === 'launcher' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'launcher'} onClick={() => setPanelView('launcher')}><Waves size={14} />快捷入口</button>
+                    <button className={panelView === 'notifications' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'notifications'} onClick={() => {
+                      setPanelView('notifications')
+                      void window.island?.markNotificationsRead()
+                    }}><Bell size={14} />通知{notificationState.unreadCount > 0 && <i>{Math.min(99, notificationState.unreadCount)}</i>}</button>
+                  </div>
                   <span className="panelClock"><time>{time}</time><small>{formatDate(date)}</small></span>
                   <div className="panelTools">
                     <button className="roundButton" type="button" onClick={() => setExpanded(false)} aria-label="收起" title="收起"><ChevronDown size={18} /></button>
                   </div>
                 </div>
 
-                <div className="launcherGrid" aria-label="快捷入口">
+                {panelView === 'launcher' ? <div className="launcherGrid" aria-label="快捷入口">
                   {launcherState.entries.map((entry) => (
                     <button className="launcherTile" title={entry.name} key={entry.id} type="button" onClick={() => void launchShortcut(entry)}>
                       <span><ShortcutIcon entry={entry} /></span>
@@ -1082,11 +1241,22 @@ function App() {
                     <span><Settings size={22} /></span>
                     <b>管理</b>
                   </button>
-                  <button className="launcherTile fixed" title="流云创作器" type="button" onClick={() => setSettingsOpen(true)}>
+                  <button className="launcherTile fixed" title="流云创作器" type="button" onClick={() => window.island?.openCreator()}>
                     <span><Waves size={22} /></span>
                     <b>创作</b>
                   </button>
-                </div>
+                </div> : (
+                  <NotificationPanelContent
+                    state={notificationState}
+                    settings={snapshot.settings}
+                    onEnable={requestNotificationAccess}
+                    onDismiss={() => updateGeneralSettings({ notificationOnboardingDismissed: true })}
+                    onClear={() => {
+                      void window.island?.clearNotificationHistory()
+                      setNotificationState((current) => ({ ...current, items: [], unreadCount: 0 }))
+                    }}
+                  />
+                )}
             </div>
           </div>
         )}
@@ -1096,4 +1266,8 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+)

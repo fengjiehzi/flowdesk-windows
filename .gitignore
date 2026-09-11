@@ -4,6 +4,9 @@ dist/
 release/
 windows-dynamic-island/
 output/
+native/**/bin/
+native/**/obj/
+build/generated/
 
 .agents/
 .pet-runs/

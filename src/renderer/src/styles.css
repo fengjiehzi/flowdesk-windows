@@ -53,8 +53,8 @@ button {
   padding: 8px;
 }
 
-.surface-trigger .surfaceFrame {
-  place-items: start center;
+.compact-mode-notification.surface-compact .surfaceFrame {
+  padding: 12px;
 }
 
 .surface-panel .surfaceFrame {
@@ -74,15 +74,10 @@ button {
   justify-content: center;
   gap: 18px;
   overflow: hidden;
-  border: 0;
-  border-radius: 22px 18px 22px 18px;
+  border-radius: 999px;
   padding: 0 18px 0 24px;
   color: var(--fg);
   background: transparent;
-  box-shadow:
-    inset 0 0 0 1px var(--hairline-strong),
-    inset 0 1px 0 var(--hairline-strong),
-    0 4px 11px rgb(2 4 7 / 26%);
   cursor: pointer;
   font-size: 19px;
   font-weight: 650;
@@ -100,32 +95,6 @@ button {
     transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.compact::before {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  content: '';
-  border-radius: inherit;
-  background:
-    radial-gradient(ellipse at 24% -20%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 54%),
-    linear-gradient(145deg, color-mix(in srgb, var(--bg) 86%, #1a2430), var(--panel));
-  opacity: var(--alpha);
-  pointer-events: none;
-}
-
-.compact::after {
-  position: absolute;
-  inset: 1px;
-  z-index: -1;
-  content: '';
-  border-radius: inherit;
-  background:
-    radial-gradient(ellipse at 78% 110%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 48%),
-    linear-gradient(110deg, transparent 30%, rgb(243 245 247 / 7%) 50%, transparent 68%);
-  opacity: var(--alpha);
-  pointer-events: none;
-}
-
 .isActive .compact {
   opacity: 1;
   transform: translateY(0) scale(1);
@@ -136,396 +105,75 @@ button {
   transform: scale(0.98);
 }
 
-.triggerControl {
-  position: relative;
+.cloudBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.cloudBackdropArt {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
-  overflow: hidden;
-  border: 0;
-  padding: 0;
-  color: var(--fg);
-  background: transparent;
-  cursor: grab;
-  isolation: isolate;
-  touch-action: none;
-}
-
-.triggerControl.is-dragging {
-  cursor: grabbing;
-}
-
-.triggerArtworkMotion {
-  position: absolute;
-  inset: 0;
-  display: block;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-100%);
-  transform-origin: top center;
-  transition:
-    opacity 160ms ease,
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, opacity;
-}
-
-.isActive .triggerArtworkMotion {
   opacity: 1;
-  transform: translateY(0);
+  filter: none;
 }
 
-.triggerControl:focus-visible {
-  outline: 0;
-}
-
-.triggerControl:focus-visible .triggerSkin {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 72%, var(--fg)),
-    inset 0 -1px 0 color-mix(in srgb, var(--accent) 86%, transparent);
-}
-
-.triggerSkin {
-  position: absolute;
-  inset: 0;
-  display: block;
-  overflow: hidden;
-  pointer-events: none;
-  transform-origin: top center;
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.canvasTriggerSkin,
-.triggerCanvas {
-  width: 100%;
-  height: 100%;
-}
-
-.canvasTriggerSkin {
-  transform: translateY(calc(var(--pull-distance) * var(--cloud-response)));
-}
-
-.triggerCanvas {
-  display: block;
-}
-
-.triggerControl {
-  --accent: var(--cloud-color);
-}
-
-.cloudEffects {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: block;
-  overflow: hidden;
-  opacity: 0.72;
-  pointer-events: none;
-  transform-origin: top center;
-  transition:
-    opacity 140ms ease,
-    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.cloudStrand {
-  position: absolute;
-  top: calc(3px + var(--cloud-index) * 2.4px);
-  left: 50%;
-  width: calc(38% + var(--cloud-index) * 4%);
-  height: calc(7px + var(--cloud-index) * 1.2px);
-  display: block;
-  border-bottom: 1px solid color-mix(in srgb, var(--cloud-color) 74%, transparent);
-  border-radius: 50%;
-  opacity: calc(0.82 - var(--cloud-index) * 0.075);
-  transform: translateX(-50%) scaleX(0.88);
-}
-
-.cloudParticle {
-  position: absolute;
-  width: 2px;
-  height: 2px;
-  display: block;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--cloud-color) 82%, var(--fg));
-  box-shadow: 0 0 5px color-mix(in srgb, var(--cloud-color) 68%, transparent);
-  opacity: 0.24;
-}
-
-.triggerControl:hover .cloudEffects {
-  opacity: 1;
-  transform: translateY(calc(var(--cloud-response) * 2px)) scaleY(calc(1 + var(--cloud-response) * 0.04));
-}
-
-.gesture-vertical .cloudEffects {
-  opacity: 1;
-  transform: translateY(var(--pull-distance)) scaleY(var(--pull-scale));
-}
-
-.liquidRidge {
-  transform: scaleY(var(--pull-scale));
-}
-
-.liquidRidge svg {
+.fluxCanvas {
   width: 100%;
   height: 100%;
   display: block;
-  overflow: visible;
+  border-radius: inherit;
 }
 
-.liquidBody {
-  fill: color-mix(in srgb, var(--panel) 88%, #10151c);
-  fill-opacity: var(--alpha);
-  stroke: rgb(0 0 0 / 82%);
-  stroke-width: 1.3px;
-  vector-effect: non-scaling-stroke;
-}
-
-.liquidEdge {
-  fill: none;
-  stroke: color-mix(in srgb, var(--accent) 62%, transparent);
-  stroke-width: 1px;
-  vector-effect: non-scaling-stroke;
-}
-
-.liquidCurrent {
-  fill: none;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.liquidCurrentRear {
-  stroke: color-mix(in srgb, var(--accent) 27%, transparent);
-  stroke-width: 0.7px;
-  stroke-dasharray: 24 90;
-}
-
-.liquidCurrentFront {
-  stroke: color-mix(in srgb, var(--fg) 52%, var(--accent));
-  stroke-width: 0.55px;
-  stroke-dasharray: 14 72;
-}
-
-.liquidSeam {
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
-  width: 32px;
-  height: 1px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--accent), color-mix(in srgb, var(--fg) 78%, var(--accent)), var(--accent), transparent);
-  opacity: 0.78;
-  transform: translateX(-50%);
-  transition: opacity 140ms ease, transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.style-liquid-ridge:hover .liquidSeam {
-  opacity: 1;
-  transform: translateX(-50%) scaleX(1.38);
-}
-
-.magneticRail {
-  display: grid;
-  grid-template-columns: 1fr 112px 1fr;
-  align-items: center;
-  border-radius: 0 0 15px 15px;
+.fluxCanvas.isFallback {
   background:
-    linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 7%, transparent) 32%, color-mix(in srgb, var(--accent) 10%, transparent) 50%, color-mix(in srgb, var(--accent) 7%, transparent) 68%, transparent),
-    linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, #20262e), color-mix(in srgb, var(--bg) 84%, #030508));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--fg) 12%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--accent) 45%, transparent),
-    inset 0 0 0 1px rgb(0 0 0 / 74%);
-  opacity: var(--alpha);
+    linear-gradient(to bottom, color-mix(in srgb, var(--flux-mist) 48%, transparent), transparent 48%),
+    radial-gradient(ellipse at 24% 64%, color-mix(in srgb, var(--flux-primary) 88%, transparent), transparent 46%),
+    radial-gradient(ellipse at 64% 32%, color-mix(in srgb, var(--flux-secondary) 82%, transparent), transparent 48%),
+    radial-gradient(ellipse at 86% 70%, color-mix(in srgb, var(--flux-tertiary) 78%, transparent), transparent 45%),
+    var(--flux-base);
 }
 
-.magneticTrack {
-  position: relative;
-  height: 1px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--fg) 9%, transparent);
-  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.magneticTrackLeft {
-  margin-left: 18px;
-}
-
-.magneticTrackRight {
-  margin-right: 18px;
-}
-
-.magneticTrack span {
+.cloudBackdrop::after,
+.studioPreviewArt::after,
+.presetArt::after {
   position: absolute;
-  top: 0;
-  width: 36px;
-  height: 1px;
+  top: 5%;
+  right: 3%;
+  left: 3%;
+  z-index: 1;
+  height: 44%;
   display: block;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0.76;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 55%), rgb(255 255 255 / 10%) 70%, transparent);
+  content: '';
+  pointer-events: none;
 }
 
-.magneticTrackLeft span {
-  right: 0;
-}
-
-.magneticTrackRight span {
-  left: 0;
-}
-
-.magneticCore {
+.compact > :not(.cloudBackdrop),
+.notificationPreview > :not(.cloudBackdrop),
+.panelChrome > :not(.cloudBackdrop) {
   position: relative;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 0 0 11px 11px;
-  background: color-mix(in srgb, var(--panel) 76%, #171c24);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--fg) 7%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--accent) 26%, transparent);
-  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1;
 }
 
-.magneticEnergy {
-  width: 48px;
-  height: 2px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--accent), color-mix(in srgb, var(--fg) 64%, var(--accent)), var(--accent), transparent);
-  opacity: 0.76;
-  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease;
-}
-
-.magneticTongue {
-  position: absolute;
-  left: 50%;
-  bottom: 2px;
-  width: 72px;
-  height: 4px;
-  border-radius: 0 0 6px 6px;
-  background: color-mix(in srgb, var(--panel) 78%, #090c10);
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 48%, transparent);
-  transform: translate(-50%, var(--pull-distance));
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.style-magnetic-rail:hover .magneticTrackLeft {
-  transform: translateX(-4px);
-}
-
-.style-magnetic-rail:hover .magneticTrackRight {
-  transform: translateX(4px);
-}
-
-.style-magnetic-rail:hover .magneticEnergy {
+.compact .cloudBackdropArt {
+  inset: 0;
+  width: 100%;
+  height: 100%;
   opacity: 1;
-  transform: scaleX(1.42);
-}
-
-.style-magnetic-rail.gesture-horizontal .magneticCore {
-  transform: scaleX(0.76);
-}
-
-.style-magnetic-rail.gesture-vertical .magneticTrackLeft {
-  transform: translateX(6px);
-}
-
-.style-magnetic-rail.gesture-vertical .magneticTrackRight {
-  transform: translateX(-6px);
-}
-
-.gesture-horizontal .triggerSkin {
-  opacity: 0.94;
-}
-
-.edgeDock {
-  border-radius: 0 0 18px 18px;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--bg) 78%, #020305), color-mix(in srgb, var(--panel) 91%, #111821) 28%, color-mix(in srgb, var(--panel) 96%, #151c25) 50%, color-mix(in srgb, var(--panel) 91%, #111821) 72%, color-mix(in srgb, var(--bg) 78%, #020305));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--fg) 8%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--accent) 28%, transparent),
-    inset 0 0 0 1px rgb(0 0 0 / 68%);
-  opacity: var(--alpha);
-  transform: scaleY(var(--pull-scale));
-}
-
-.dockRail {
-  position: absolute;
-  top: 8px;
-  right: 22px;
-  left: 22px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 8%, transparent) 12%, color-mix(in srgb, var(--accent) 24%, transparent) 50%, color-mix(in srgb, var(--fg) 8%, transparent) 88%, transparent);
-}
-
-.dockPulse {
-  position: absolute;
-  top: 8px;
-  width: 62px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0;
-}
-
-.dockPulseLeft {
-  left: 32px;
-}
-
-.dockPulseRight {
-  right: 32px;
-  transform: scaleX(-1);
-}
-
-.dockCore {
-  position: absolute;
-  top: 5px;
-  left: 50%;
-  width: 132px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border-radius: 0 0 18px 18px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, #1c2530), color-mix(in srgb, var(--bg) 82%, #030507));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--fg) 7%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--accent) 42%, transparent);
-  transform: translateX(-50%);
-  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dockCore span {
-  width: 44px;
-  height: 1px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, var(--accent), color-mix(in srgb, var(--fg) 52%, var(--accent)), var(--accent), transparent);
-  opacity: 0.7;
-  transition: opacity 140ms ease, transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.style-edge-dock:hover .dockCore {
-  transform: translateX(-50%) translateY(1px);
-}
-
-.style-edge-dock:hover .dockCore span {
-  opacity: 1;
-  transform: scaleX(1.45);
 }
 
 .compact time {
   position: relative;
   z-index: 1;
-}
-
-.compactHalo {
-  position: absolute;
-  top: 3px;
-  left: 13px;
-  z-index: 0;
-  width: 58px;
-  height: 30px;
-  display: block;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, var(--cloud-glow), transparent 70%);
-  opacity: 0.55;
-  pointer-events: none;
 }
 
 .pulse {
@@ -604,6 +252,7 @@ button {
 }
 
 .surface-creator,
+.surface-settings,
 .surface-launcher {
   overflow: hidden;
   background:
@@ -612,8 +261,76 @@ button {
 }
 
 .surface-creator .surfaceFrame,
+.surface-settings .surfaceFrame,
 .surface-launcher .surfaceFrame {
   display: block;
+}
+
+.generalSettingsShell {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 28px clamp(22px, 6vw, 42px) 36px;
+  color: var(--fg);
+  scrollbar-width: thin;
+}
+
+.generalSettingsHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.generalSettingsHeader > span {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: 15px 11px 15px 11px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.generalSettingsHeader small {
+  color: color-mix(in srgb, var(--accent) 62%, var(--fg));
+  font-family: Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: .13em;
+}
+
+.generalSettingsHeader h1 {
+  margin: 2px 0;
+  font-family: Bahnschrift, 'Segoe UI Variable Display', sans-serif;
+  font-size: 24px;
+  font-weight: 540;
+}
+
+.generalSettingsHeader p {
+  margin: 0;
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  font-size: 10px;
+}
+
+.generalSettingsBody {
+  display: grid;
+  gap: 14px;
+}
+
+.settingsCard.inspectorGroup {
+  margin-top: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 15px 11px 15px 11px;
+  padding: 17px 18px;
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+
+.settingsCard.inspectorGroup > h3 {
+  margin-bottom: 13px;
+  color: color-mix(in srgb, var(--fg) 55%, transparent);
 }
 
 .studioShell {
@@ -716,8 +433,7 @@ button {
 }
 
 .studioHistory button,
-.studioSaveButton,
-.studioSaveAsButton {
+.studioSaveButton {
   height: 34px;
   display: inline-flex;
   align-items: center;
@@ -736,8 +452,7 @@ button {
   padding: 0;
 }
 
-.studioSaveButton,
-.studioSaveAsButton {
+.studioSaveButton {
   padding: 0 11px;
 }
 
@@ -748,16 +463,14 @@ button {
   font-weight: 720;
 }
 
-.studioHistory button:hover:not(:disabled),
-.studioSaveAsButton:hover:not(:disabled) {
+.studioHistory button:hover:not(:disabled) {
   color: var(--fg);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .studioHistory button:disabled,
-.studioSaveButton:disabled,
-.studioSaveAsButton:disabled {
+.studioSaveButton:disabled {
   cursor: default;
   opacity: .35;
 }
@@ -843,6 +556,26 @@ button {
   margin-left: auto;
 }
 
+.studioLibraryTitle button {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 0 6px;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  background: rgb(255 255 255 / 3%);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.studioLibraryTitle button:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
 .studioWorks {
   max-height: calc(100vh - 390px);
   overflow: auto;
@@ -925,7 +658,7 @@ button {
 .studioPreview {
   position: relative;
   display: grid;
-  place-items: start center;
+  place-items: center;
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: 18px;
@@ -949,12 +682,38 @@ button {
   position: relative;
   min-width: 150px;
   max-width: 92%;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 84%, #02050a);
+  box-shadow: 0 18px 46px rgb(0 0 0 / 38%), inset 0 1px 0 rgb(255 255 255 / 7%);
 }
 
-.studioPreviewArt .triggerSkin,
-.presetArt .triggerSkin {
-  inset: 0;
-  transform: none;
+.studioPreviewModes {
+  position: absolute;
+  top: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+}
+
+.studioPreviewModes button {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: color-mix(in srgb, var(--fg) 38%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.studioPreviewModes button.active {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .studioPreviewMeta {
@@ -1029,9 +788,16 @@ button {
 
 .presetArt {
   position: absolute;
-  inset: 0 0 35px;
+  inset: 7px 7px 35px;
   overflow: hidden;
+  border-radius: 999px;
+  box-shadow: inset 0 -8px 14px rgb(0 0 0 / 12%);
   pointer-events: none;
+}
+
+.presetArt .fluxCanvas {
+  width: 100%;
+  height: 100%;
 }
 
 .presetArt * {
@@ -1091,6 +857,11 @@ button {
 
 .inspectorHeader button:hover {
   color: var(--fg);
+}
+
+.studioColorFields {
+  display: grid;
+  gap: 6px;
 }
 
 .studioColorField {
@@ -1748,10 +1519,21 @@ button {
 }
 
 .panelChrome {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  overflow: hidden;
+  border-radius: 999px;
   padding-left: 4px;
+  isolation: isolate;
+}
+
+.panelChrome .cloudBackdropArt {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 1;
 }
 
 .liveStatus {
@@ -1919,44 +1701,6 @@ select:focus-visible {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .isActive .liquidCurrentRear {
-    animation: liquid-current 6.4s linear infinite;
-  }
-
-  .isActive .liquidCurrentFront {
-    animation: liquid-current 4.8s linear infinite reverse;
-  }
-
-  .isActive .magneticTrackLeft span {
-    animation: magnetic-scan-left 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
-
-  .isActive .magneticTrackRight span {
-    animation: magnetic-scan-right 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
-
-  .isActive .magneticEnergy {
-    animation: magnetic-breathe 3.2s ease-in-out infinite;
-  }
-
-  .isActive .dockPulseLeft {
-    animation: dock-pulse-left 6.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
-
-  .isActive .dockPulseRight {
-    animation: dock-pulse-right 6.2s cubic-bezier(0.4, 0, 0.2, 1) 180ms infinite;
-  }
-
-  .isActive .cloudStrand {
-    animation: cloud-strand calc(5.6s / var(--cloud-speed)) linear infinite;
-    animation-delay: calc(var(--cloud-index) * -310ms);
-  }
-
-  .isActive .cloudParticle {
-    animation: cloud-particle calc(3.8s / var(--cloud-speed)) ease-in-out infinite;
-    animation-delay: calc(var(--cloud-index) * -240ms);
-  }
-
   .pulse {
     animation: status-pulse 2.4s ease-in-out infinite;
   }
@@ -1965,100 +1709,9 @@ select:focus-visible {
     animation: content-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  .compactHalo {
-    animation: cloud-breathe 3.6s ease-in-out infinite alternate;
-  }
 
   .panel::after {
     animation: cloud-drift 7s ease-in-out infinite alternate;
-  }
-}
-
-@keyframes liquid-current {
-  from {
-    stroke-dashoffset: 0;
-    opacity: 0.46;
-  }
-  48% {
-    opacity: 1;
-  }
-  to {
-    stroke-dashoffset: -114;
-    opacity: 0.46;
-  }
-}
-
-@keyframes magnetic-scan-left {
-  0%,
-  68% {
-    opacity: 0;
-    transform: translateX(-74px);
-  }
-  78% {
-    opacity: 0.8;
-  }
-  94%,
-  100% {
-    opacity: 0;
-    transform: translateX(0);
-  }
-}
-
-@keyframes magnetic-scan-right {
-  0%,
-  68% {
-    opacity: 0;
-    transform: translateX(74px);
-  }
-  78% {
-    opacity: 0.8;
-  }
-  94%,
-  100% {
-    opacity: 0;
-    transform: translateX(0);
-  }
-}
-
-@keyframes magnetic-breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 0.9;
-  }
-}
-
-@keyframes dock-pulse-left {
-  0%,
-  72% {
-    opacity: 0;
-    transform: translateX(0);
-  }
-  80% {
-    opacity: 0.58;
-  }
-  96%,
-  100% {
-    opacity: 0;
-    transform: translateX(242px);
-  }
-}
-
-@keyframes dock-pulse-right {
-  0%,
-  72% {
-    opacity: 0;
-    transform: translateX(0) scaleX(-1);
-  }
-  80% {
-    opacity: 0.58;
-  }
-  96%,
-  100% {
-    opacity: 0;
-    transform: translateX(-242px) scaleX(-1);
   }
 }
 
@@ -2074,30 +1727,6 @@ select:focus-visible {
   }
 }
 
-@keyframes cloud-strand {
-  0%,
-  100% {
-    opacity: 0.28;
-    transform: translateX(-50%) scaleX(0.72);
-  }
-  48% {
-    opacity: 0.88;
-    transform: translateX(-50%) scaleX(1);
-  }
-}
-
-@keyframes cloud-particle {
-  0%,
-  100% {
-    opacity: 0.12;
-    transform: translate3d(-8px, -1px, 0) scale(0.7);
-  }
-  50% {
-    opacity: 0.82;
-    transform: translate3d(8px, 4px, 0) scale(1.15);
-  }
-}
-
 @keyframes content-in {
   from {
     opacity: 0;
@@ -2109,16 +1738,6 @@ select:focus-visible {
   }
 }
 
-@keyframes cloud-breathe {
-  from {
-    opacity: 0.4;
-    transform: translate3d(-5px, 0, 0) scale(0.9);
-  }
-  to {
-    opacity: 0.7;
-    transform: translate3d(12px, 0, 0) scale(1.14);
-  }
-}
 
 @keyframes cloud-drift {
   from {
@@ -2128,6 +1747,477 @@ select:focus-visible {
   to {
     opacity: 0.55;
     transform: translate3d(14px, -3px, 0) scale(1.08);
+  }
+}
+
+.notificationPreview {
+  position: relative;
+  width: 430px;
+  height: 68px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  overflow: hidden;
+  padding: 0 15px;
+  color: var(--fg);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  isolation: isolate;
+  animation: notification-in 260ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.capsuleNotification {
+  border-radius: 999px;
+}
+
+.notificationPreview:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, var(--fg));
+  outline-offset: -2px;
+}
+
+.notificationPreview .cloudBackdropArt {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+}
+
+.notificationAppIcon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 12px 9px 12px 9px;
+  color: color-mix(in srgb, var(--fg) 88%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.notificationAppIcon img,
+.notificationSources i img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.notificationCopy,
+.notificationListCopy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.notificationCopy > span,
+.notificationListCopy > span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.notificationCopy b,
+.notificationListCopy b {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notificationCopy small,
+.notificationListCopy small {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--fg) 40%, transparent);
+  font-size: 9px;
+}
+
+.notificationCopy em,
+.notificationListCopy em {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notificationCount,
+.panelTabs i {
+  min-width: 23px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--bg) 92%, #000);
+  background: var(--accent);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.islandUnreadDot {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  z-index: 8;
+  width: 7px;
+  height: 7px;
+  border: 1px solid color-mix(in srgb, var(--bg) 72%, transparent);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 68%, transparent);
+}
+
+.islandUnreadDot.quiet {
+  opacity: .42;
+  box-shadow: none;
+}
+
+.panelTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.panelTabs button {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 8px;
+  color: color-mix(in srgb, var(--fg) 46%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.panelTabs button.active {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.panelTabs i {
+  min-width: 16px;
+  height: 16px;
+  font-size: 8px;
+}
+
+.notificationPanelContent {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 24px minmax(0, 1fr);
+}
+
+.notificationListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: color-mix(in srgb, var(--fg) 42%, transparent);
+  font-size: 9px;
+}
+
+.notificationListHeader button,
+.notificationSettingsLink {
+  border: 0;
+  color: color-mix(in srgb, var(--accent) 72%, var(--fg));
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.notificationList {
+  min-height: 0;
+  display: grid;
+  gap: 5px;
+  overflow: auto;
+  padding-right: 3px;
+  scrollbar-width: thin;
+}
+
+.notificationList > button {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 14px 11px 14px 11px;
+  padding: 7px 10px;
+  color: var(--fg);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  cursor: pointer;
+  text-align: left;
+}
+
+.notificationList > button:hover {
+  background: var(--card-hover);
+}
+
+.notificationEmpty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: color-mix(in srgb, var(--fg) 34%, transparent);
+  font-size: 10px;
+}
+
+.notificationOnboarding {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 18px 14px 18px 14px;
+  padding: 14px 16px;
+  background: radial-gradient(circle at 0 0, color-mix(in srgb, var(--accent) 13%, transparent), transparent 48%), var(--card);
+}
+
+.notificationOnboarding > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px 10px 13px 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.notificationOnboarding b {
+  font-size: 12px;
+}
+
+.notificationOnboarding p {
+  margin: 5px 0 0;
+  color: color-mix(in srgb, var(--fg) 48%, transparent);
+  font-size: 9px;
+}
+
+.notificationOnboarding > button {
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 12px;
+  color: color-mix(in srgb, var(--bg) 88%, #000);
+  background: var(--accent);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.notificationOnboarding > button.quiet {
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  background: rgb(255 255 255 / 5%);
+}
+
+.notificationSettings {
+  display: grid;
+  gap: 9px;
+}
+
+.notificationToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.notificationToggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.notificationToggle b {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.notificationToggle small {
+  color: color-mix(in srgb, var(--fg) 38%, transparent);
+  font-size: 8px;
+}
+
+.notificationToggle input,
+.notificationSources input {
+  accent-color: var(--accent);
+}
+
+.clipboardArchiveSettings {
+  display: grid;
+  gap: 9px;
+}
+
+.clipboardArchiveDirectory {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 7px 8px;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  background: rgb(255 255 255 / 2%);
+  cursor: pointer;
+  text-align: left;
+}
+
+.clipboardArchiveDirectory:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.clipboardArchiveDirectory > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.clipboardArchiveDirectory b,
+.clipboardArchiveDirectory small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboardArchiveDirectory b {
+  font-size: 9px;
+}
+
+.clipboardArchiveDirectory small {
+  color: color-mix(in srgb, var(--fg) 34%, transparent);
+  font-size: 7px;
+}
+
+.shortcutSummary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 11px 8px 11px 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.shortcutSummary span {
+  display: grid;
+  gap: 2px;
+}
+
+.shortcutSummary b {
+  font-size: 9px;
+}
+
+.shortcutSummary small {
+  color: color-mix(in srgb, var(--fg) 38%, transparent);
+  font-size: 7px;
+}
+
+.shortcutSummary kbd {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 7px;
+  padding: 6px 8px;
+  color: color-mix(in srgb, var(--fg) 78%, var(--accent));
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--fg) 12%, transparent);
+  font: 8px Consolas, monospace;
+  white-space: nowrap;
+}
+
+.compactToggle {
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+}
+
+.desktopAdapterStatuses {
+  display: grid;
+  gap: 5px;
+}
+
+.desktopAdapterStatuses > span {
+  display: grid;
+  grid-template-columns: 7px 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+}
+
+.desktopAdapterStatuses small,
+.desktopAdapterStatuses p {
+  margin: 0;
+  color: color-mix(in srgb, var(--fg) 38%, transparent);
+  font-size: 8px;
+}
+
+.statusDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--fg) 28%, transparent);
+}
+
+.statusDot.waiting,
+.statusDot.capturing {
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.statusDot.error,
+.statusDot.integrity-mismatch {
+  background: #ef785f;
+}
+
+.notificationSources {
+  display: grid;
+  gap: 4px;
+}
+
+.notificationSources > span {
+  color: color-mix(in srgb, var(--fg) 34%, transparent);
+  font-size: 8px;
+}
+
+.notificationSources label {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+}
+
+.notificationSources i {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-style: normal;
+}
+
+.notificationSources b {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes notification-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(.94);
   }
 }
 
@@ -2145,9 +2235,62 @@ select:focus-visible {
 @media (prefers-reduced-transparency: reduce) {
   .compact::before,
   .compact::after,
-  .triggerSkin,
+  .fluxCanvas,
   .panel::before,
   .panel::after {
     opacity: 1;
   }
+}
+/* FLUX glass surface */
+.compact,
+.notificationPreview,
+.panelChrome,
+.studioPreviewArt {
+  border: 1px solid color-mix(in srgb, var(--fg) 75%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  box-shadow:
+    inset 0 1px 2px rgb(255 255 255 / 75%),
+    inset 0 -12px 20px rgb(0 0 0 / 18%),
+    0 22px 36px -16px rgb(0 0 0 / 42%),
+    0 3px 8px rgb(0 0 0 / 18%);
+}
+
+.compact time,
+.notificationCopy,
+.panelTabs,
+.panelClock {
+  text-shadow: 0 1px 4px var(--bg), 0 0 10px var(--bg);
+}
+
+.errorBoundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 2rem;
+  text-align: center;
+}
+
+.errorBoundary h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.errorBoundary p {
+  margin: 0 0 1rem;
+  opacity: 0.8;
+}
+
+.errorBoundary button {
+  padding: 0.5rem 1rem;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
 }

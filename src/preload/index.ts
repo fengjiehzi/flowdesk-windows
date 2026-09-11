@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IslandSettings } from '../shared/settings'
 import type { InstalledAppCandidate, LauncherState, WebsiteShortcutInput } from '../shared/launcher'
-import type { TriggerMovePhase, TriggerVisualLayout } from '../shared/triggerGesture'
+import type { NotificationCenterState } from '../shared/notifications'
 import type { IslandSnapshot } from '../shared/types'
 
 contextBridge.exposeInMainWorld('island', {
@@ -17,16 +17,18 @@ contextBridge.exposeInMainWorld('island', {
   reorderShortcuts: (ids: string[]) => ipcRenderer.invoke('launcher:reorder', ids) as Promise<LauncherState>,
   launchShortcut: (id: string) => ipcRenderer.invoke('launcher:launch', id) as Promise<void>,
   completeLauncherSetup: () => ipcRenderer.invoke('launcher:completeSetup') as Promise<LauncherState>,
+  getNotificationState: () => ipcRenderer.invoke('notifications:getState') as Promise<NotificationCenterState>,
+  requestNotificationAccess: () => ipcRenderer.invoke('notifications:requestAccess') as Promise<NotificationCenterState>,
+  markNotificationsRead: () => ipcRenderer.invoke('notifications:markRead') as Promise<void>,
+  clearNotificationHistory: () => ipcRenderer.invoke('notifications:clear') as Promise<void>,
+  openNotificationSettings: () => ipcRenderer.invoke('notifications:openSettings') as Promise<void>,
+  openClipboardArchiveDirectory: () => ipcRenderer.invoke('clipboardArchive:openDirectory') as Promise<void>,
+  openNotificationSource: (appId: string) => ipcRenderer.invoke('notifications:openSource', appId) as Promise<void>,
+  openPanel: (view: 'launcher' | 'notifications') => ipcRenderer.send('notifications:openPanel', view),
+  setNotificationPreviewHovered: (hovered: boolean) => ipcRenderer.send('notifications:hovered', hovered),
   openLauncherManager: () => ipcRenderer.send('launcher:openManager'),
   setExpanded: (expanded: boolean) => ipcRenderer.send('island:setExpanded', expanded),
-  setSettingsOpen: (open: boolean) => ipcRenderer.send('island:setSettingsOpen', open),
-  moveTrigger: (phase: TriggerMovePhase, screenX: number) => ipcRenderer.send('island:moveTrigger', phase, screenX),
-  setTriggerPull: (distance: number) => ipcRenderer.send('island:setTriggerPull', distance),
-  onTriggerVisualLayout: (callback: (layout: TriggerVisualLayout) => void) => {
-    const listener = (_: Electron.IpcRendererEvent, layout: TriggerVisualLayout) => callback(layout)
-    ipcRenderer.on('island:triggerVisualLayout', listener)
-    return () => ipcRenderer.off('island:triggerVisualLayout', listener)
-  },
+  openCreator: () => ipcRenderer.send('creator:open'),
   onSnapshot: (callback: (snapshot: IslandSnapshot) => void) => {
     const listener = (_: Electron.IpcRendererEvent, snapshot: IslandSnapshot) => callback(snapshot)
     ipcRenderer.on('island:snapshot', listener)
@@ -36,5 +38,15 @@ contextBridge.exposeInMainWorld('island', {
     const listener = (_: Electron.IpcRendererEvent, state: LauncherState) => callback(state)
     ipcRenderer.on('launcher:state', listener)
     return () => ipcRenderer.off('launcher:state', listener)
+  },
+  onNotificationState: (callback: (state: NotificationCenterState) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, state: NotificationCenterState) => callback(state)
+    ipcRenderer.on('notifications:state', listener)
+    return () => ipcRenderer.off('notifications:state', listener)
+  },
+  onPanelView: (callback: (view: 'launcher' | 'notifications') => void) => {
+    const listener = (_: Electron.IpcRendererEvent, view: 'launcher' | 'notifications') => callback(view)
+    ipcRenderer.on('island:panelView', listener)
+    return () => ipcRenderer.off('island:panelView', listener)
   }
 })

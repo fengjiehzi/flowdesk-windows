@@ -1,6 +1,6 @@
 {
   "name": "windows-dynamic-island",
-  "version": "1.0.20",
+  "version": "1.0.27",
   "productName": "Windows 灵动岛",
   "description": "Windows 桌面状态与快捷控制中心",
   "author": "Windows Dynamic Island",
@@ -10,13 +10,14 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",
-    "test": "tsx src/shared/settings.test.ts && tsx src/shared/islandState.test.ts && tsx src/shared/islandPresentation.test.ts && tsx src/shared/triggerGesture.test.ts && tsx src/shared/launcher.test.ts",
-    "pack:win": "npm run build && electron-builder --win nsis"
+    "test": "tsx src/shared/settings.test.ts && tsx src/shared/islandState.test.ts && tsx src/shared/islandPresentation.test.ts && tsx src/shared/triggerGesture.test.ts && tsx src/shared/launcher.test.ts && tsx src/shared/notifications.test.ts",
+    "native:self-test": "dotnet run --project native/NotificationBridge/NotificationBridge.csproj -c Release -- --self-test",
+    "identity:dev": "pwsh -NoProfile -File scripts/build-windows.ps1 -Mode Dev -Register",
+    "pack:win": "pwsh -NoProfile -File scripts/build-windows.ps1 -Mode Release && npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "electron-log": "^5.4.3",
     "electron-store": "^10.1.0",
-    "uiohook-napi": "^1.5.5",
     "zod": "^3.25.0"
   },
   "devDependencies": {
@@ -38,9 +39,7 @@
     "appId": "com.desktop.dynamicisland",
     "productName": "Windows 灵动岛",
     "asar": true,
-    "asarUnpack": [
-      "node_modules/uiohook-napi/**/*"
-    ],
+    "forceCodeSigning": true,
     "directories": {
       "output": "release"
     },
@@ -49,16 +48,35 @@
       "resources/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/generated/native",
+        "to": "native"
+      },
+      {
+        "from": "build/generated/identity/WindowsDynamicIsland.Identity.msix",
+        "to": "identity/WindowsDynamicIsland.Identity.msix"
+      }
+    ],
     "win": {
       "icon": "resources/app-icon.ico",
       "target": "nsis",
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
+      },
       "artifactName": "Windows-Dynamic-Island-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "packElevateHelper": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
     }
   }
 }

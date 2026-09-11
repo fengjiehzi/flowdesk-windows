@@ -1,7 +1,7 @@
 import type { IslandSettings } from '../../shared/settings'
 import type { InstalledAppCandidate, LauncherState, WebsiteShortcutInput } from '../../shared/launcher'
+import type { NotificationCenterState } from '../../shared/notifications'
 import type { IslandSnapshot } from '../../shared/types'
-import type { TriggerMovePhase, TriggerVisualLayout } from '../../shared/triggerGesture'
 
 declare global {
   interface Window {
@@ -18,14 +18,22 @@ declare global {
       reorderShortcuts: (ids: string[]) => Promise<LauncherState>
       launchShortcut: (id: string) => Promise<void>
       completeLauncherSetup: () => Promise<LauncherState>
+      getNotificationState: () => Promise<NotificationCenterState>
+      requestNotificationAccess: () => Promise<NotificationCenterState>
+      markNotificationsRead: () => Promise<void>
+      clearNotificationHistory: () => Promise<void>
+      openNotificationSettings: () => Promise<void>
+      openClipboardArchiveDirectory: () => Promise<void>
+      openNotificationSource: (appId: string) => Promise<void>
+      openPanel: (view: 'launcher' | 'notifications') => void
+      setNotificationPreviewHovered: (hovered: boolean) => void
       openLauncherManager: () => void
       setExpanded: (expanded: boolean) => void
-      setSettingsOpen: (open: boolean) => void
-      moveTrigger: (phase: TriggerMovePhase, screenX: number) => void
-      setTriggerPull: (distance: number) => void
-      onTriggerVisualLayout: (callback: (layout: TriggerVisualLayout) => void) => () => void
+      openCreator: () => void
       onSnapshot: (callback: (snapshot: IslandSnapshot) => void) => () => void
       onLauncherState: (callback: (state: LauncherState) => void) => () => void
+      onNotificationState: (callback: (state: NotificationCenterState) => void) => () => void
+      onPanelView: (callback: (view: 'launcher' | 'notifications') => void) => () => void
     }
   }
 }
