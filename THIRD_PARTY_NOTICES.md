@@ -1,29 +1,5 @@
-# Third-Party Notices
+# 第三方依赖说明
 
-## shuke-lab-flux
+本项目使用的 Electron、React、npm 和 NuGet 依赖遵循各自许可证，本项目的 MIT License 不替代这些依赖的许可条款。
 
-Source: https://github.com/KTBOY/shuke-lab-flux
-
-The FLUX WebGL shader algorithm and glass-surface styling in this project are adapted from shuke-lab-flux.
-
-MIT License
-
-Copyright (c) 2026 ktboy-舒克
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+npm 依赖及版本见 [package.json](package.json) 和 [package-lock.json](package-lock.json)；原生模块依赖见 `native/` 下各项目的 `.csproj` 文件。分发时请保留所使用依赖要求的版权和许可声明。

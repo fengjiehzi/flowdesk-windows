@@ -9,7 +9,7 @@
 - 桌面整理：内置 SmartDeskBox 原生模块，在桌面显示应用与文件分类盒子，支持原生文件菜单、拖放、布局记忆、管理与搜索、手动分类、沙盒备份及可选 AI 识别。
 - 通知中心：新通知会让灵动岛自动变为通知胶囊，并可选捕获微信、飞书桌面弹窗；通知历史仅保存在本次运行内。
 - 剪贴板归档：选择启用后，将复制的文字、图片和媒体文件保存到本地文档目录。
-- FLUX 流体材质：基于 `KTBOY/shuke-lab-flux` 的 MIT Shader 算法，以原生 WebGL 统一覆盖紧凑岛、通知胶囊和展开面板顶部；不支持 WebGL 时自动使用 CSS 三色渐变。
+- FLUX 流体材质：以原生 WebGL 统一覆盖紧凑岛、通知胶囊和展开面板顶部；不支持 WebGL 时自动使用 CSS 三色渐变。
 - 流云创作器：保留经典、流体、界面、游戏、二次元、自然 6 类共 31 款配色预设，并支持紧凑岛、通知胶囊、面板顶部三种比例预览。
 - 自由定制：调整三种颜色、流速、噪声尺度、Warp 强度、色彩密度和交互响应，并保存最多 32 个方案。
 - 托盘控制：快速显示、隐藏、切换 8 种主题、打开创作器或退出程序。
@@ -125,11 +125,7 @@ npm run pack:win
 
 ## 开源许可
 
-本项目采用 [MIT License](LICENSE) 开源。第三方代码和依赖遵循各自许可证，相关声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-## 第三方来源
-
-FLUX Shader 算法改编自 [KTBOY/shuke-lab-flux](https://github.com/KTBOY/shuke-lab-flux)，按 MIT License 使用。项目未引入原仓库的品牌、Logo 或页面文案；完整声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本项目采用 [MIT License](LICENSE) 开源。第三方依赖遵循各自许可证，见 [第三方依赖说明](THIRD_PARTY_NOTICES.md)。
 
 ## 反馈与贡献
 

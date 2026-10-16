@@ -25,7 +25,6 @@ void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }`
 
-// Adapted from KTBOY/shuke-lab-flux under MIT. See THIRD_PARTY_NOTICES.md.
 const fragmentShaderSource = `
 precision highp float;
 uniform vec2 uResolution;
