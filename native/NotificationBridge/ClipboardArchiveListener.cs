@@ -43,6 +43,7 @@ internal sealed class ClipboardArchiveListener : IDisposable
             _rootPath = fullPath;
             _enabled = true;
             _window ??= new ClipboardWindow(Capture);
+            _write(new { type = "clipboardArchiveStatus", enabled = true });
         }
         catch (Exception error)
         {
@@ -63,6 +64,7 @@ internal sealed class ClipboardArchiveListener : IDisposable
         _rootPath = null;
         _window?.Dispose();
         _window = null;
+        _write(new { type = "clipboardArchiveStatus", enabled = false });
     }
 
     private void Capture()
@@ -115,6 +117,7 @@ internal sealed class ClipboardArchiveListener : IDisposable
                     try
                     {
                         action();
+                        _write(new { type = "clipboardArchiveSaved" });
                     }
                     catch (Exception error)
                     {
@@ -140,6 +143,7 @@ internal sealed class ClipboardArchiveListener : IDisposable
 
     private void CopyMediaFiles(string rootPath, IEnumerable<string> sourcePaths, DateTime now)
     {
+        Exception? failure = null;
         var mediaDirectory = MediaDirectory(rootPath);
         Directory.CreateDirectory(mediaDirectory);
         foreach (var sourcePath in sourcePaths)
@@ -151,9 +155,10 @@ internal sealed class ClipboardArchiveListener : IDisposable
             }
             catch (Exception error)
             {
-                WriteError(error);
+                failure = error;
             }
         }
+        if (failure is not null) throw failure;
     }
 
     private static void SaveBitmap(string rootPath, byte[] bytes, DateTime now)

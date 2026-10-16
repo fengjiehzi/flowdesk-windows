@@ -1,25 +1,27 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { app, dialog, nativeImage, net, shell, type BrowserWindow } from 'electron'
 import Store from 'electron-store'
 import { z } from 'zod'
+import { loadRecoverableConfig } from './configRecovery'
+import { parseDiscoveredApplications, powershellDiscoveryScript } from './applicationDiscovery'
 import {
-  dedupeInstalledApplications,
   installedAppCandidateSchema,
   isLaunchableApplicationShortcut,
   isValidLauncherOrder,
   launcherEntryViewSchema,
   launcherStateSchema,
+  launcherSearchRequestSchema,
   maxLauncherEntries,
   normalizeWebsiteUrl,
   renameShortcutInputSchema,
   websiteShortcutInputSchema,
   type InstalledAppCandidate,
   type LauncherState,
-  type WindowsApplicationShortcut,
+  type LauncherSearchItem,
   type WebsiteShortcutInput
 } from '../shared/launcher'
 
@@ -35,13 +37,18 @@ const storedLauncherEntrySchema = launcherEntryViewSchema.extend({
   if (entry.kind === 'app' && entry.launchType === 'url') {
     context.addIssue({ code: z.ZodIssueCode.custom, message: '应用入口类型无效' })
   }
-  if (entry.launchType === 'path' && !['.exe', '.lnk'].includes(path.extname(entry.target).toLowerCase())) {
+  if (entry.kind === 'app' && entry.launchType === 'path' && !['.exe', '.lnk'].includes(path.extname(entry.target).toLowerCase())) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: '仅支持 .exe 和 .lnk 应用' })
+  }
+  if (['file', 'script', 'folder'].includes(entry.kind) && entry.launchType !== 'path') {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: '本地启动项必须使用文件路径' })
   }
 })
 const launcherStoreSchema = z.object({
   setupCompleted: z.boolean().default(false),
-  entries: z.array(storedLauncherEntrySchema).max(maxLauncherEntries).default([])
+  entries: z.array(storedLauncherEntrySchema).max(maxLauncherEntries).default([]),
+  localEntries: z.array(storedLauncherEntrySchema).default([]),
+  recentEntries: z.array(storedLauncherEntrySchema).max(50).default([])
 })
 const windowsShortcutSchema = z.object({
   name: z.string(),
@@ -56,56 +63,17 @@ type StoredLauncherEntry = LauncherStoreData['entries'][number]
 type DiscoveredTarget = InstalledAppCandidate & Pick<StoredLauncherEntry, 'launchType' | 'target'>
 
 const defaultLauncherStore = launcherStoreSchema.parse({})
-const powershellDiscoveryScript = `
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-$ErrorActionPreference = 'SilentlyContinue'
-$roots = @(
-  [Environment]::GetFolderPath('Programs'),
-  [Environment]::GetFolderPath('CommonPrograms'),
-  [Environment]::GetFolderPath('Desktop'),
-  [Environment]::GetFolderPath('CommonDesktopDirectory')
-) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
-$shell = New-Object -ComObject WScript.Shell
-$items = @()
-foreach ($root in $roots) {
-  foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.lnk') {
-    $shortcut = $shell.CreateShortcut($file.FullName)
-    $targetPath = [Environment]::ExpandEnvironmentVariables($shortcut.TargetPath)
-    $iconSource = [Environment]::ExpandEnvironmentVariables(($shortcut.IconLocation -replace ',-?\\d+$', '').Trim('"'))
-    $items += [pscustomobject]@{
-      name = $file.BaseName
-      shortcutPath = $file.FullName
-      targetPath = $targetPath
-      arguments = [string]$shortcut.Arguments
-      iconSource = $iconSource
-    }
-  }
-}
-@($items) | ConvertTo-Json -Compress -Depth 3
-`
-const powershellShortcutScript = `
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-$shortcutPath = $args[0]
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-[pscustomobject]@{
-  name = [IO.Path]::GetFileNameWithoutExtension($shortcutPath)
-  shortcutPath = $shortcutPath
-  targetPath = [Environment]::ExpandEnvironmentVariables($shortcut.TargetPath)
-  arguments = [string]$shortcut.Arguments
-  iconSource = [Environment]::ExpandEnvironmentVariables(($shortcut.IconLocation -replace ',-?\\d+$', '').Trim('"'))
-} | ConvertTo-Json -Compress
-`
-
 function publicState(data: LauncherStoreData): LauncherState {
   return launcherStateSchema.parse({
     setupCompleted: data.setupCompleted,
-    entries: data.entries.map(({ id, kind, name, icon }) => ({ id, kind, name, icon }))
+    entries: data.entries.map(({ id, kind, name, icon }) => ({ id, kind, name, icon })),
+    localEntries: data.localEntries.map(({ id, kind, name, icon, target }) => ({ id, kind, name, icon, path: target })),
+    recentEntries: data.recentEntries.map(({ id, kind, name, icon }) => ({ id, kind, name, icon }))
   })
 }
 
 function targetKey(entry: Pick<StoredLauncherEntry, 'launchType' | 'target'>) {
-  return `${entry.launchType}:${entry.target.toLocaleLowerCase()}`
+  return `${entry.launchType}:${entry.launchType === 'url' ? entry.target : entry.target.toLocaleLowerCase()}`
 }
 
 async function fileIcon(...sources: Array<string | undefined>) {
@@ -131,9 +99,30 @@ async function websiteIcon(target: string) {
     const response = await net.fetch(new URL('/favicon.ico', target).toString(), { signal: controller.signal })
     if (!response.ok) return undefined
     const declaredSize = Number(response.headers.get('content-length') || 0)
-    if (declaredSize > 256_000) return undefined
-    const bytes = Buffer.from(await response.arrayBuffer())
-    if (!bytes.length || bytes.length > 256_000) return undefined
+    if (declaredSize > 256_000) {
+      await response.body?.cancel()
+      return undefined
+    }
+    const reader = response.body?.getReader()
+    if (!reader) return undefined
+    const chunks: Uint8Array[] = []
+    let size = 0
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        size += value.byteLength
+        if (size > 256_000) {
+          await reader.cancel()
+          return undefined
+        }
+        chunks.push(value)
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    if (!size) return undefined
+    const bytes = Buffer.concat(chunks, size)
     const image = nativeImage.createFromBuffer(bytes)
     if (image.isEmpty()) return undefined
     return `data:image/png;base64,${image.resize({ width: 32, height: 32, quality: 'good' }).toPNG().toString('base64')}`
@@ -145,26 +134,49 @@ async function websiteIcon(target: string) {
 }
 
 async function resolveWindowsShortcut(shortcutPath: string) {
-  const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', powershellShortcutScript, shortcutPath], {
-    windowsHide: true,
-    timeout: 3000,
-    maxBuffer: 256 * 1024,
-    encoding: 'utf8'
+  const shortcut = shell.readShortcutLink(shortcutPath)
+  return windowsShortcutSchema.parse({
+    name: path.basename(shortcutPath, path.extname(shortcutPath)),
+    shortcutPath,
+    targetPath: shortcut.target,
+    arguments: shortcut.args ?? '',
+    iconSource: shortcut.icon
   })
-  return windowsShortcutSchema.parse(JSON.parse(stdout))
 }
 
 export class LauncherController {
   private data: LauncherStoreData
   private candidates = new Map<string, DiscoveredTarget>()
+  private removedEntry: { entry: StoredLauncherEntry; index: number } | null = null
+  readonly recoveryBackupPath: string | null
 
   constructor(
     private readonly store: Store<LauncherStoreData>,
     private readonly onChange: (state: LauncherState) => void
   ) {
-    const parsed = launcherStoreSchema.safeParse({ ...defaultLauncherStore, ...store.store })
-    this.data = parsed.success ? parsed.data : defaultLauncherStore
-    if (!parsed.success) this.store.store = defaultLauncherStore
+    const loaded = loadRecoverableConfig(store, launcherStoreSchema, (value) => {
+      const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+      const seen = new Set<string>()
+      const entries = (Array.isArray(input.entries) ? input.entries : []).flatMap((entry) => {
+        const parsed = storedLauncherEntrySchema.safeParse(entry)
+        if (!parsed.success || seen.has(parsed.data.id)) return []
+        seen.add(parsed.data.id)
+        return [parsed.data]
+      }).slice(0, maxLauncherEntries)
+      const recoverList = (value: unknown) => (Array.isArray(value) ? value : []).flatMap(item => {
+        const parsed = storedLauncherEntrySchema.safeParse(item)
+        return parsed.success ? [parsed.data] : []
+      })
+      return { setupCompleted: input.setupCompleted === true, entries, localEntries: recoverList(input.localEntries), recentEntries: recoverList(input.recentEntries).slice(0, 50) }
+    })
+    // Older versions could save different IDs for the same local and pinned target.
+    const knownEntries = new Map([...loaded.data.localEntries, ...loaded.data.entries].map(entry => [targetKey(entry), entry]))
+    this.data = {
+      ...loaded.data,
+      localEntries: loaded.data.localEntries.map(entry => knownEntries.get(targetKey(entry))!),
+      recentEntries: loaded.data.recentEntries.map(entry => knownEntries.get(targetKey(entry)) ?? entry)
+    }
+    this.recoveryBackupPath = loaded.backupPath
   }
 
   getState() {
@@ -172,8 +184,9 @@ export class LauncherController {
   }
 
   private save(next: LauncherStoreData) {
-    this.data = launcherStoreSchema.parse(next)
-    this.store.store = this.data
+    const parsed = launcherStoreSchema.parse(next)
+    this.store.store = parsed
+    this.data = parsed
     const state = this.getState()
     this.onChange(state)
     return state
@@ -185,30 +198,21 @@ export class LauncherController {
 
   async discoverInstalledApps(refresh = false) {
     if (!this.candidates.size || refresh) {
-      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', powershellDiscoveryScript], {
+      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', powershellDiscoveryScript], {
         windowsHide: true,
-        timeout: 15_000,
-        maxBuffer: 5 * 1024 * 1024,
+        timeout: 30_000,
+        maxBuffer: 8 * 1024 * 1024,
         encoding: 'utf8'
       })
       const raw = stdout.trim() ? JSON.parse(stdout) as unknown : []
-      const shortcuts = z.array(windowsShortcutSchema).parse(Array.isArray(raw) ? raw : [raw])
-      const applications = dedupeInstalledApplications(shortcuts
-        .filter((shortcut) => isLaunchableApplicationShortcut(shortcut) && existsSync(shortcut.shortcutPath) && existsSync(shortcut.targetPath))
-        .map((shortcut: WindowsApplicationShortcut) => ({
-          name: shortcut.name,
-          launchType: 'path' as const,
-          target: shortcut.shortcutPath,
-          identity: `${shortcut.targetPath}|${shortcut.arguments}`,
-          iconSource: existsSync(shortcut.iconSource || '') ? shortcut.iconSource : shortcut.targetPath
-        })))
+      const applications = parseDiscoveredApplications(raw)
       const candidates = new Map<string, DiscoveredTarget>()
 
       for (let offset = 0; offset < applications.length; offset += 16) {
         const batch = applications.slice(offset, offset + 16)
         const withIcons = await Promise.all(batch.map(async (application) => {
           const id = createHash('sha256').update(`${application.launchType}:${application.target}`).digest('hex').slice(0, 24)
-          const icon = await fileIcon(application.iconSource, application.target)
+          const icon = application.icon ?? await fileIcon(application.iconSource, application.target)
           return installedAppCandidateSchema.parse({ id, name: application.name, icon })
         }))
         batch.forEach((application, index) => {
@@ -217,6 +221,12 @@ export class LauncherController {
         })
       }
       this.candidates = candidates
+      const icons = new Map([...candidates.values()].map((candidate) => [targetKey(candidate), candidate.icon]))
+      const entries = this.data.entries.map((entry) => {
+        const icon = icons.get(targetKey(entry))
+        return entry.kind === 'app' && icon && icon !== entry.icon ? { ...entry, icon } : entry
+      })
+      if (entries.some((entry, index) => entry !== this.data.entries[index])) this.save({ ...this.data, entries })
     }
 
     const selected = new Map(
@@ -245,7 +255,8 @@ export class LauncherController {
       ...this.data,
       entries: [
         ...this.data.entries,
-        ...additions.map(({ name, icon, launchType, target }) => ({
+        ...additions.map(({ name, icon, launchType, target }) => this.data.localEntries.find(entry =>
+          targetKey(entry) === targetKey({ launchType, target })) ?? ({
           id: randomUUID(),
           kind: 'app' as const,
           name,
@@ -276,15 +287,21 @@ export class LauncherController {
     if (shortcut && (!isLaunchableApplicationShortcut(shortcut) || !existsSync(shortcut.targetPath))) {
       throw new Error('该快捷方式不是可启动应用')
     }
+    const icon = shortcut
+      ? await fileIcon(existsSync(shortcut.iconSource || '') ? shortcut.iconSource : shortcut.targetPath, shortcut.targetPath, target)
+      : await fileIcon(target)
+    if (this.data.entries.some((entry) => targetKey(entry) === targetKey({ launchType: 'path', target }))) {
+      throw new Error('该应用已经添加')
+    }
+    this.ensureCapacity()
     return this.save({
       ...this.data,
-      entries: [...this.data.entries, {
+      entries: [...this.data.entries, this.data.localEntries.find(entry =>
+        targetKey(entry) === targetKey({ launchType: 'path', target })) ?? {
         id: randomUUID(),
         kind: 'app',
         name,
-        icon: shortcut
-          ? await fileIcon(existsSync(shortcut.iconSource || '') ? shortcut.iconSource : shortcut.targetPath, shortcut.targetPath, target)
-          : await fileIcon(target),
+        icon,
         launchType: 'path',
         target
       }]
@@ -298,13 +315,18 @@ export class LauncherController {
       throw new Error('该网站已经添加')
     }
     this.ensureCapacity()
+    const icon = await websiteIcon(target)
+    if (this.data.entries.some((entry) => entry.launchType === 'url' && entry.target === target)) {
+      throw new Error('该网站已经添加')
+    }
+    this.ensureCapacity()
     return this.save({
       ...this.data,
       entries: [...this.data.entries, {
         id: randomUUID(),
         kind: 'website',
         name: parsed.name,
-        icon: await websiteIcon(target),
+        icon,
         launchType: 'url',
         target
       }]
@@ -313,17 +335,35 @@ export class LauncherController {
 
   renameEntry(input: unknown) {
     const { id, name } = renameShortcutInputSchema.parse(input)
-    if (!this.data.entries.some((entry) => entry.id === id)) throw new Error('快捷入口不存在')
+    if (![...this.data.entries, ...this.data.localEntries].some((entry) => entry.id === id)) throw new Error('快捷入口不存在')
     return this.save({
       ...this.data,
-      entries: this.data.entries.map((entry) => entry.id === id ? { ...entry, name } : entry)
+      entries: this.data.entries.map((entry) => entry.id === id ? { ...entry, name } : entry),
+      localEntries: this.data.localEntries.map((entry) => entry.id === id ? { ...entry, name } : entry),
+      recentEntries: this.data.recentEntries.map((entry) => entry.id === id ? { ...entry, name } : entry)
     })
   }
 
   removeEntry(entryId: unknown) {
     const id = z.string().uuid().parse(entryId)
-    if (!this.data.entries.some((entry) => entry.id === id)) throw new Error('快捷入口不存在')
-    return this.save({ ...this.data, entries: this.data.entries.filter((entry) => entry.id !== id) })
+    const index = this.data.entries.findIndex((entry) => entry.id === id)
+    if (index < 0) throw new Error('快捷入口不存在')
+    const removed = { entry: this.data.entries[index], index }
+    const state = this.save({ ...this.data, entries: this.data.entries.filter((entry) => entry.id !== id) })
+    this.removedEntry = removed
+    return state
+  }
+
+  restoreRemovedEntry() {
+    if (!this.removedEntry) throw new Error('没有可撤销的删除')
+    this.ensureCapacity()
+    const { entry, index } = this.removedEntry
+    if (this.data.entries.some((item) => item.id === entry.id || targetKey(item) === targetKey(entry))) throw new Error('该入口已存在')
+    const entries = [...this.data.entries]
+    entries.splice(Math.min(index, entries.length), 0, entry)
+    const state = this.save({ ...this.data, entries })
+    this.removedEntry = null
+    return state
   }
 
   reorderEntries(entryIds: unknown) {
@@ -338,12 +378,100 @@ export class LauncherController {
     return this.save({ ...this.data, setupCompleted: true })
   }
 
+  async addLocalPaths(input: unknown) {
+    const paths = [...new Set(z.array(z.string().trim().min(1).max(32767)).min(1).parse(input).map(value => {
+      const expanded = value.replace(/^"(.*)"$/, '$1').replace(/%([^%]+)%/g, (token, name: string) => process.env[name] ?? token)
+      if (!path.isAbsolute(expanded)) throw new Error('请输入文件或文件夹的完整路径')
+      return path.resolve(expanded)
+    }))]
+    const additions: StoredLauncherEntry[] = []
+    for (const target of paths) {
+      if (!existsSync(target)) throw new Error(`路径不存在：${target}`)
+      const key = targetKey({ launchType: 'path', target })
+      if ([...this.data.localEntries, ...additions].some(item => targetKey(item) === key)) continue
+      const existing = this.data.entries.find(item => targetKey(item) === key)
+      const directory = statSync(target).isDirectory()
+      const extension = path.extname(target).toLowerCase()
+      const kind = directory ? 'folder' : ['.exe', '.lnk'].includes(extension) ? 'app' : ['.bat', '.cmd', '.ps1', '.py', '.js', '.mjs', '.cjs', '.vbs', '.sh'].includes(extension) ? 'script' : 'file'
+      additions.push(existing ?? { id: randomUUID(), kind, name: (directory ? path.basename(target) || target : path.parse(target).name).slice(0, 24), launchType: 'path', target, icon: await fileIcon(target) })
+    }
+    const existingKeys = new Set(this.data.localEntries.map(targetKey))
+    const unique = additions.filter(item => !existingKeys.has(targetKey(item))).map(item =>
+      this.data.entries.find(entry => targetKey(entry) === targetKey(item)) ?? item)
+    if (!unique.length) return this.getState()
+    return this.save({ ...this.data, localEntries: [...this.data.localEntries, ...unique] })
+  }
+
+  async pickLocalTargets(mode: unknown, parent?: BrowserWindow) {
+    const folder = z.enum(['files', 'folder']).parse(mode) === 'folder'
+    const options: Electron.OpenDialogOptions = { title: folder ? '添加本地文件夹' : '添加文件、绿色软件或脚本', properties: folder ? ['openDirectory'] : ['openFile', 'multiSelections'] }
+    const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
+    return result.canceled || !result.filePaths.length ? null : this.addLocalPaths(result.filePaths)
+  }
+
+  removeLocalEntry(entryId: unknown) {
+    const id = z.string().uuid().parse(entryId)
+    const entry = this.data.localEntries.find(item => item.id === id)
+    if (!entry) throw new Error('本地启动项不存在')
+    const keep = (item: StoredLauncherEntry) => targetKey(item) !== targetKey(entry)
+    return this.save({ ...this.data, localEntries: this.data.localEntries.filter(keep), entries: this.data.entries.filter(keep), recentEntries: this.data.recentEntries.filter(keep) })
+  }
+
+  pinLocalEntry(entryId: unknown, value: unknown) {
+    const id = z.string().uuid().parse(entryId)
+    const pinned = z.boolean().parse(value)
+    const entry = this.data.localEntries.find(item => item.id === id)
+    if (!entry) throw new Error('本地启动项不存在')
+    const existing = this.data.entries.find(item => targetKey(item) === targetKey(entry))
+    if (pinned && !existing) {
+      this.ensureCapacity()
+      return this.save({ ...this.data, entries: [...this.data.entries, entry] })
+    }
+    if (!pinned && existing) return this.removeEntry(existing.id)
+    return this.getState()
+  }
+
+  searchEntries(value: unknown): LauncherSearchItem[] {
+    const query = z.string().max(32767).parse(value).trim().toLocaleLowerCase()
+    const found = new Map<string, LauncherSearchItem>()
+    for (const [source, entries] of [['local', this.data.localEntries], ['entry', this.data.entries], ['recent', this.data.recentEntries]] as const) {
+      for (const entry of entries) {
+        const key = targetKey(entry)
+        if (!found.has(key) && `${entry.name} ${entry.target}`.toLocaleLowerCase().includes(query)) {
+          found.set(key, { id: entry.id, source, name: entry.name, kind: entry.kind, icon: entry.icon, detail: entry.target })
+        }
+      }
+    }
+    for (const entry of this.candidates.values()) {
+      const key = targetKey(entry)
+      if (!found.has(key) && entry.name.toLocaleLowerCase().includes(query)) found.set(key, { id: entry.id, source: 'installed', name: entry.name, kind: 'app', icon: entry.icon, detail: '已扫描的应用' })
+    }
+    return [...found.values()]
+  }
+
+  async launchSearchItem(input: unknown) {
+    const request = launcherSearchRequestSchema.parse(input)
+    const collection = request.source === 'entry' ? this.data.entries : request.source === 'local' ? this.data.localEntries : request.source === 'recent' ? this.data.recentEntries : null
+    let entry = collection?.find(item => item.id === request.id)
+    if (request.source === 'installed') {
+      const candidate = this.candidates.get(request.id)
+      if (candidate) entry = [...this.data.entries, ...this.data.localEntries, ...this.data.recentEntries].find(item => targetKey(item) === targetKey(candidate))
+        ?? { ...candidate, id: randomUUID(), kind: 'app' }
+    }
+    if (!entry) throw new Error('启动项不存在，请刷新后重试')
+    return this.launchRecord(entry)
+  }
+
   async launchEntry(entryId: unknown) {
     const id = z.string().uuid().parse(entryId)
     const entry = this.data.entries.find((candidate) => candidate.id === id)
     if (!entry) throw new Error('快捷入口不存在')
+    return this.launchRecord(entry)
+  }
 
+  private async launchRecord(entry: StoredLauncherEntry) {
     if (entry.launchType === 'path') {
+      if (!existsSync(entry.target)) throw new Error('文件或文件夹不存在，请在本地启动管理中更新路径')
       const error = await shell.openPath(entry.target)
       if (error) throw new Error(error)
     } else if (entry.launchType === 'appId') {
@@ -351,6 +479,10 @@ export class LauncherController {
     } else {
       await shell.openExternal(entry.target, { activate: true })
     }
+    try {
+      this.save({ ...this.data, recentEntries: [entry, ...this.data.recentEntries.filter(item => targetKey(item) !== targetKey(entry))].slice(0, 50) })
+      return { recentSaved: true }
+    } catch { return { recentSaved: false } }
   }
 }
 

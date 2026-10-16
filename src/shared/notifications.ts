@@ -53,7 +53,10 @@ export const notificationCenterStateSchema = z.object({
   items: z.array(systemNotificationItemSchema).max(100),
   unreadCount: z.number().int().min(0).max(99_900),
   sources: z.array(notificationSourceSchema).max(100),
-  desktopAdapters: z.array(desktopNotificationAdapterSchema).max(2)
+  desktopAdapters: z.array(desktopNotificationAdapterSchema).max(2),
+  clipboardArchiveError: z.string().max(500).nullable().default(null),
+  clipboardArchiveActive: z.boolean().default(false),
+  bridgeStatus: z.enum(['running', 'unavailable', 'stopped']).default('stopped')
 })
 
 export const bridgeEventSchema = z.discriminatedUnion('type', [
@@ -67,6 +70,8 @@ export const bridgeEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('suppression'), state: notificationSuppressionSchema }),
   z.object({ type: z.literal('clipboardArchiveError'), message: z.string().max(500) }),
+  z.object({ type: z.literal('clipboardArchiveSaved') }),
+  z.object({ type: z.literal('clipboardArchiveStatus'), enabled: z.boolean() }),
   z.object({ type: z.literal('error'), message: z.string().max(500) })
 ])
 
@@ -121,6 +126,7 @@ export function mergeNotificationItems(
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
 
   for (const notification of [...incoming].sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))) {
+    if (Date.parse(notification.createdAt) < cutoff) continue
     const id = notificationKey(notification)
     if (items.some((item) => item.id === id)) continue
     const newest = items[0]
@@ -164,7 +170,7 @@ export function notificationSources(
       muted: existing?.muted ?? false
     })
   }
-  return [...sources.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')).slice(0, 100)
+  return [...sources.values()].sort((left, right) => Number(right.muted) - Number(left.muted) || left.name.localeCompare(right.name, 'zh-CN')).slice(0, 100)
 }
 
 export function unreadNotificationCount(items: SystemNotificationItem[]) {

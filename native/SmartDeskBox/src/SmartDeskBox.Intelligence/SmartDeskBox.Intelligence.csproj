@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../SmartDeskBox.Core/SmartDeskBox.Core.csproj" />
+    <None Update="app_fingerprints.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -40,6 +40,8 @@ export class NotificationController {
   ])
   private restartAvailable = true
   private shuttingDown = false
+  private clipboardArchiveError: string | null = null
+  private clipboardArchiveActive = false
 
   constructor(private readonly options: NotificationControllerOptions) {}
 
@@ -55,12 +57,16 @@ export class NotificationController {
       items: visibleItems,
       unreadCount: unreadNotificationCount(visibleItems),
       sources: notificationSources(this.items, settings.mutedNotificationApps, [...this.discoveredSources.values()]),
-      desktopAdapters: [...this.desktopAdapters.values()]
+      desktopAdapters: [...this.desktopAdapters.values()],
+      clipboardArchiveError: this.clipboardArchiveError,
+      clipboardArchiveActive: settings.clipboardArchiveEnabled && this.clipboardArchiveActive,
+      bridgeStatus: this.process ? 'running' : this.accessStatus === 'unavailable' ? 'unavailable' : 'stopped'
     }
   }
 
   configure() {
     const settings = this.options.settings()
+    if (!settings.clipboardArchiveEnabled) this.clipboardArchiveActive = false
     if (settings.notificationsEnabled || settings.clipboardArchiveEnabled) {
       this.start()
       this.send({ type: settings.notificationsEnabled ? 'start' : 'stop' })
@@ -107,17 +113,39 @@ export class NotificationController {
     this.emitState()
   }
 
-  async shutdown() {
+  async shutdown(onTimeout: () => Promise<'wait' | 'cancel' | 'force'> = async () => 'cancel') {
     this.shuttingDown = true
     const child = this.process
-    if (!child) return
-    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()))
+    if (!child) return true
     this.send({ type: 'shutdown' })
-    await closed
+    while (this.process === child) {
+      const closed = await new Promise<boolean>((resolve) => {
+        const finish = (value: boolean) => {
+          clearTimeout(timer)
+          child.off('close', onClose)
+          resolve(value)
+        }
+        const onClose = () => finish(true)
+        const timer = setTimeout(() => finish(false), 10_000)
+        child.once('close', onClose)
+      })
+      if (closed || this.process !== child) return true
+      const decision = await onTimeout()
+      if (this.process !== child) return true
+      if (decision === 'force') {
+        if (child.kill()) return true
+      }
+      if (decision === 'cancel') {
+        this.shuttingDown = false
+        this.restartAvailable = true
+        return false
+      }
+    }
+    return true
   }
 
   private start() {
-    if (this.process) return
+    if (this.process || this.shuttingDown) return
     if (!existsSync(this.options.bridgePath)) {
       this.accessStatus = 'unavailable'
       this.emitState()
@@ -140,12 +168,16 @@ export class NotificationController {
       this.emitState()
     })
     child.on('close', () => {
+      this.clipboardArchiveActive = false
       if (this.process === child) this.process = null
       const settings = this.options.settings()
       if (this.shuttingDown || (!settings.notificationsEnabled && !settings.clipboardArchiveEnabled)) return
       if (this.restartAvailable) {
         this.restartAvailable = false
-        setTimeout(() => this.start(), 1000).unref()
+        setTimeout(() => {
+          const currentSettings = this.options.settings()
+          if (!this.shuttingDown && (currentSettings.notificationsEnabled || currentSettings.clipboardArchiveEnabled)) this.start()
+        }, 1000).unref()
       } else {
         this.accessStatus = 'error'
         this.emitState()
@@ -174,7 +206,9 @@ export class NotificationController {
   ) {
     if (this.process?.stdin.writable) {
       try {
-        this.process.stdin.write(`${JSON.stringify(command)}\n`)
+        // Keep the line protocol independent of the native process's Windows code page.
+        const line = JSON.stringify(command).replace(/[^\x00-\x7f]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
+        this.process.stdin.write(`${line}\n`)
       } catch {
         // A concurrent process exit is handled by the close listener.
       }
@@ -208,9 +242,12 @@ export class NotificationController {
         if (event.type === 'desktopNotification') this.ingestDirect(event.notification)
         if (event.type === 'desktopAdapterStatus') this.desktopAdapters.set(event.adapter.id, event.adapter)
         if (event.type === 'clipboardArchiveError') {
-          console.error('Clipboard archive error:', event.message)
-          continue
+          this.clipboardArchiveError = event.message
         }
+        if (event.type === 'clipboardArchiveSaved') {
+          this.clipboardArchiveError = null
+        }
+        if (event.type === 'clipboardArchiveStatus') this.clipboardArchiveActive = event.enabled
         if (event.type === 'error') this.accessStatus = 'error'
         this.emitState()
       } catch {
@@ -221,8 +258,9 @@ export class NotificationController {
   }
 
   private ingest(snapshot: BridgeNotification[]) {
+    if (!this.options.settings().notificationsEnabled) return
     for (const item of snapshot) {
-      this.discoveredSources.set(item.appId, { appId: item.appId, appName: item.appName, icon: item.icon })
+      this.rememberSource(item)
     }
     const diff = notificationSnapshotDiff(this.snapshotKeys, snapshot)
     this.snapshotKeys = diff.keys
@@ -233,7 +271,8 @@ export class NotificationController {
   }
 
   private ingestDirect(item: BridgeNotification) {
-    this.discoveredSources.set(item.appId, { appId: item.appId, appName: item.appName, icon: item.icon })
+    if (!this.options.settings().notificationsEnabled) return
+    this.rememberSource(item)
     if (!filterMutedNotifications([item], this.options.settings().mutedNotificationApps.map((app) => app.id)).length) return
     this.items = mergeNotificationItems(this.items, [item])
     this.options.onNotification()
@@ -243,6 +282,12 @@ export class NotificationController {
     for (const adapter of this.desktopAdapters.values()) {
       this.desktopAdapters.set(adapter.id, { ...adapter, status: 'disabled' })
     }
+  }
+
+  private rememberSource(item: BridgeNotification) {
+    this.discoveredSources.delete(item.appId)
+    this.discoveredSources.set(item.appId, { appId: item.appId, appName: item.appName, icon: item.icon })
+    while (this.discoveredSources.size > 100) this.discoveredSources.delete(this.discoveredSources.keys().next().value!)
   }
 
   private emitState() {

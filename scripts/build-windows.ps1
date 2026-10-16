@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $generatedRoot = Join-Path $projectRoot 'build\generated'
 $nativeOutput = Join-Path $generatedRoot 'native'
+$nativePackages = Join-Path $generatedRoot 'native-nuget'
 $identityStage = Join-Path $generatedRoot 'identity-stage'
 $identityOutput = Join-Path $generatedRoot 'identity'
 $packageJson = Get-Content (Join-Path $projectRoot 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -63,8 +64,10 @@ $bridgeManifest = (Get-Content (Join-Path $projectRoot 'build\identity\Notificat
 $bridgeManifestPath = Join-Path $generatedRoot 'NotificationBridge.manifest'
 [IO.File]::WriteAllText($bridgeManifestPath, $bridgeManifest, [Text.UTF8Encoding]::new($false))
 
-dotnet publish (Join-Path $projectRoot 'native\NotificationBridge\NotificationBridge.csproj') -c Release -o $nativeOutput -p:ApplicationManifest=$bridgeManifestPath
+dotnet publish (Join-Path $projectRoot 'native\NotificationBridge\NotificationBridge.csproj') -c Release -o $nativeOutput -p:ApplicationManifest=$bridgeManifestPath "-p:RestorePackagesPath=$nativePackages" -p:NuGetAudit=false
 if ($LASTEXITCODE -ne 0) { throw 'NotificationBridge publish failed.' }
+
+& (Join-Path $PSScriptRoot 'build-desktop-boxes.ps1')
 
 $packageManifest = (Get-Content (Join-Path $projectRoot 'build\identity\Package.appxmanifest.template') -Raw -Encoding UTF8).
   Replace('{{PUBLISHER}}', $publisherXml).
@@ -86,6 +89,8 @@ $timestampArguments = if ($Mode -eq 'Release') { @('/tr', 'http://timestamp.digi
 
 & $signTool sign /fd SHA256 @timestampArguments /f $certificatePath /p $certificatePassword (Join-Path $nativeOutput 'NotificationBridge.exe')
 if ($LASTEXITCODE -ne 0) { throw 'NotificationBridge signing failed.' }
+& $signTool sign /fd SHA256 @timestampArguments /f $certificatePath /p $certificatePassword (Join-Path $generatedRoot 'desktop-boxes\SmartDeskBox.DesktopApp.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Desktop boxes signing failed.' }
 & $makeAppx pack /o /nv /d $identityStage /p $msixPath
 if ($LASTEXITCODE -ne 0) { throw 'Sparse MSIX creation failed.' }
 & $signTool sign /fd SHA256 @timestampArguments /f $certificatePath /p $certificatePassword $msixPath

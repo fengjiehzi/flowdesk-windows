@@ -8,6 +8,7 @@ type FluxCanvasProps = {
   active?: boolean
   animated?: boolean
   interactive?: boolean
+  paused?: boolean
   className?: string
 }
 
@@ -159,15 +160,18 @@ export function FluxCanvas({
   active = true,
   animated = true,
   interactive = true,
+  paused = false,
   className = ''
 }: FluxCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cloudRef = useRef(cloud)
   const colorsRef = useRef({ baseColor, mistColor })
   const renderOnceRef = useRef<(() => void) | null>(null)
+  const pausedRef = useRef(paused)
   const [fallback, setFallback] = useState(false)
   cloudRef.current = cloud
   colorsRef.current = { baseColor, mistColor }
+  pausedRef.current = paused
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -211,6 +215,7 @@ export function FluxCanvas({
       canvas.width = width
       canvas.height = height
       gl.viewport(0, 0, width, height)
+      draw()
     }
 
     const draw = () => {
@@ -238,6 +243,7 @@ export function FluxCanvas({
 
     const animate = (now: number) => {
       frame = 0
+      if (pausedRef.current) return
       const delta = Math.min(.05, Math.max(0, (now - previousTime) / 1000))
       previousTime = now
       const current = cloudRef.current
@@ -246,22 +252,26 @@ export function FluxCanvas({
       stir *= Math.exp(-delta * 1.6 * current.response)
       flowTime += delta * current.speed * (.22 + easedHover * .08 + stir * .55)
       draw()
-      if (visible && active && animated && !reducedMotion.matches) frame = requestAnimationFrame(animate)
+      if (visible && active && animated && !pausedRef.current && !reducedMotion.matches) frame = requestAnimationFrame(animate)
     }
 
     const requestRender = () => {
       if (!resources || lost) return
-      if (visible && active && animated && !reducedMotion.matches) {
+      if (visible && active && animated && !pausedRef.current && !reducedMotion.matches) {
         if (!frame) {
           previousTime = performance.now()
           frame = requestAnimationFrame(animate)
         }
-      } else draw()
+      } else {
+        if (frame) cancelAnimationFrame(frame)
+        frame = 0
+        draw()
+      }
     }
     renderOnceRef.current = requestRender
 
     const onPointerMove = (event: PointerEvent) => {
-      if (!interactive) return
+      if (!interactive || pausedRef.current) return
       const rect = canvas.getBoundingClientRect()
       const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
       hoverTarget = inside ? 1 : 0
@@ -343,7 +353,7 @@ export function FluxCanvas({
     }
   }, [active, animated, interactive])
 
-  useEffect(() => renderOnceRef.current?.(), [cloud, baseColor, mistColor])
+  useEffect(() => renderOnceRef.current?.(), [cloud, baseColor, mistColor, paused])
 
   return (
     <canvas

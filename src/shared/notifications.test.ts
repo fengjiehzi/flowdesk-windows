@@ -94,6 +94,11 @@ const expired = mergeNotificationItems([
 ], [], now)
 assert.deepEqual(expired, [])
 
+const expiredIncoming = notification({ createdAt: new Date(now - notificationHistoryMs - 1).toISOString() })
+assert.deepEqual(mergeNotificationItems([], [expiredIncoming], now), [])
+const boundaryIncoming = notification({ createdAt: new Date(now - notificationHistoryMs).toISOString() })
+assert.equal(mergeNotificationItems([], [boundaryIncoming], now).length, 1)
+
 const sources = notificationSources(separate, [{ id: 'muted.app', name: '静音应用' }])
 assert.equal(sources.find((source) => source.id === 'muted.app')?.muted, true)
 assert.equal(sources.find((source) => source.id === 'com.example.chat')?.muted, false)

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Windows.Storage.Streams;
@@ -12,6 +13,22 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // WinExe has redirected pipes but no attached console/code page.
+        Console.SetIn(new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false)));
+        Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true });
+        if (args.Contains("--notification-lifecycle-test", StringComparer.OrdinalIgnoreCase))
+        {
+            var session = new NotificationSession();
+            var pending = session.Start();
+            session.Stop();
+            if (session.IsCurrent(pending)) throw new InvalidOperationException("Stopped access request remained current.");
+            var restarted = session.Start();
+            if (session.IsCurrent(pending) || !session.IsCurrent(restarted)) throw new InvalidOperationException("Old access request replaced a new session.");
+            session.Stop();
+            if (session.Enabled) throw new InvalidOperationException("Notification session failed to stop.");
+            Console.WriteLine("Notification lifecycle checks passed (3 scenarios)");
+            return;
+        }
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
             SelfTest();
@@ -77,7 +94,7 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
     private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = 5000 };
     private readonly DesktopPopupListener _desktopPopups;
     private readonly ClipboardArchiveListener _clipboardArchive;
-    private bool _enabled;
+    private readonly NotificationSession _notifications = new();
     private bool _disposed;
 
     public BridgeContext()
@@ -158,6 +175,8 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
                         case "shutdown":
                             OnUiThread(async () =>
                             {
+                                Stop();
+                                _desktopPopups.Configure(false);
                                 try
                                 {
                                     await _clipboardArchive.StopAndFlushAsync();
@@ -204,15 +223,16 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
 
     private async Task RequestAccessAsync()
     {
-        _enabled = true;
+        var version = _notifications.Start();
         var status = await _listener.RequestAccessAsync();
+        if (_disposed || !_notifications.IsCurrent(version)) return;
         Write(new { type = "status", status = AccessStatusName(status) });
-        if (status == UserNotificationListenerAccessStatus.Allowed) await StartAsync();
+        if (status == UserNotificationListenerAccessStatus.Allowed) await SyncAsync();
     }
 
     private async Task StartAsync()
     {
-        _enabled = true;
+        _notifications.Start();
         var status = _listener.GetAccessStatus();
         Write(new { type = "status", status = AccessStatusName(status) });
         if (status != UserNotificationListenerAccessStatus.Allowed) return;
@@ -221,12 +241,12 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
 
     private void Stop()
     {
-        _enabled = false;
+        _notifications.Stop();
     }
 
     private async Task PollStatusAsync()
     {
-        if (!_enabled || _disposed) return;
+        if (!_notifications.Enabled || _disposed) return;
         try
         {
             _desktopPopups.RefreshStatuses();
@@ -247,6 +267,8 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
 
     private async Task SyncAsync()
     {
+        var version = _notifications.Version;
+        if (_disposed || !_notifications.IsCurrent(version)) return;
         if (_listener.GetAccessStatus() != UserNotificationListenerAccessStatus.Allowed)
         {
             WriteStatus();
@@ -279,7 +301,7 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
                     // A malformed notification must not prevent the rest of the snapshot.
                 }
             }
-            Write(new { type = "snapshot", notifications });
+            if (!_disposed && _notifications.IsCurrent(version)) Write(new { type = "snapshot", notifications });
         }
         catch (Exception error)
         {

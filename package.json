@@ -1,6 +1,6 @@
 {
   "name": "windows-dynamic-island",
-  "version": "1.0.27",
+  "version": "1.0.35",
   "productName": "Windows 灵动岛",
   "description": "Windows 桌面状态与快捷控制中心",
   "author": "Windows Dynamic Island",
@@ -12,6 +12,8 @@
     "build": "tsc --noEmit && electron-vite build",
     "test": "tsx src/shared/settings.test.ts && tsx src/shared/islandState.test.ts && tsx src/shared/islandPresentation.test.ts && tsx src/shared/triggerGesture.test.ts && tsx src/shared/launcher.test.ts && tsx src/shared/notifications.test.ts",
     "native:self-test": "dotnet run --project native/NotificationBridge/NotificationBridge.csproj -c Release -- --self-test",
+    "desktop:build": "pwsh -NoProfile -File scripts/build-desktop-boxes.ps1",
+    "desktop:test": "tsx src/main/desktopBoxes.test.ts",
     "identity:dev": "pwsh -NoProfile -File scripts/build-windows.ps1 -Mode Dev -Register",
     "pack:win": "pwsh -NoProfile -File scripts/build-windows.ps1 -Mode Release && npm run build && electron-builder --win nsis"
   },
@@ -49,6 +51,10 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "build/generated/desktop-boxes",
+        "to": "desktop-boxes"
+      },
       {
         "from": "build/generated/native",
         "to": "native"

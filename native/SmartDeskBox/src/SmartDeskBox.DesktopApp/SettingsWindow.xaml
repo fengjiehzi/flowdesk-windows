@@ -1,0 +1,48 @@
+<Window x:Class="SmartDeskBox.DesktopApp.SettingsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="SmartDeskBox · 设置" Width="900" Height="760" MinWidth="780" MinHeight="560" WindowStartupLocation="CenterOwner"
+ Background="{DynamicResource Page}" Foreground="{DynamicResource Text}">
+ <Window.Resources>
+  <Style x:Key="SettingCard" TargetType="Border"><Setter Property="Background" Value="{DynamicResource Surface}"/><Setter Property="BorderBrush" Value="{DynamicResource Stroke}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="24"/><Setter Property="Margin" Value="0,0,0,16"/></Style>
+  <Style x:Key="SettingHint" TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Muted}"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="FontSize" Value="12"/><Setter Property="LineHeight" Value="20"/><Setter Property="Margin" Value="0,6,0,12"/></Style>
+ </Window.Resources>
+ <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Border BorderBrush="{DynamicResource Stroke}" BorderThickness="0,0,0,1" Padding="28,22"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="设置" FontSize="25" FontWeight="SemiBold"/><TextBlock Text="按你的习惯安排桌面" Foreground="{DynamicResource Muted}" Margin="0,6,0,0"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="搜索设置" Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,0,0,5"/><TextBox x:Name="SettingsSearch" TextChanged="Search_Changed" AutomationProperties.Name="搜索设置"/></StackPanel></Grid></Border>
+  <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="172"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Border Background="{DynamicResource Sidebar}" BorderBrush="{DynamicResource Stroke}" BorderThickness="0,0,1,0"><StackPanel Margin="14,20"><RadioButton Content="外观" Tag="Appearance" GroupName="SettingsSections" Style="{StaticResource Navigation}" IsChecked="True" Checked="Section_Checked"/><RadioButton Content="桌面与交互" Tag="Desktop" GroupName="SettingsSections" Style="{StaticResource Navigation}" Checked="Section_Checked"/><RadioButton Content="分类与 AI" Tag="AI" GroupName="SettingsSections" Style="{StaticResource Navigation}" Checked="Section_Checked"/><RadioButton Content="数据与关于" Tag="Data" GroupName="SettingsSections" Style="{StaticResource Navigation}" Checked="Section_Checked"/></StackPanel></Border>
+   <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="24,22,24,6"><StackPanel>
+    <StackPanel x:Name="SettingsSections">
+     <Border Style="{StaticResource SettingCard}" Tag="Appearance|外观 主题 明亮 深色 跟随系统 字号 文字大小 默认"><StackPanel>
+      <TextBlock Text="外观" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="管理面板、设置、区块标题和原生文件视图使用同一套明暗配色。" Style="{StaticResource SettingHint}"/>
+      <TextBlock Text="界面主题" Margin="0,8,0,8"/><ComboBox x:Name="ThemeBox" AutomationProperties.Name="界面主题"><ComboBoxItem Content="跟随系统" Tag="System"/><ComboBoxItem Content="明亮" Tag="Light"/><ComboBoxItem Content="深色" Tag="Dark"/></ComboBox>
+      <Grid Margin="0,24,0,10"><TextBlock Text="界面文字大小"/><TextBlock Text="{Binding Value, ElementName=TextSizeSlider, StringFormat={}{0:0} px}" HorizontalAlignment="Right" Foreground="{DynamicResource Muted}"/></Grid>
+      <Slider x:Name="TextSizeSlider" Minimum="12" Maximum="18" TickFrequency="1" IsSnapToTickEnabled="True" AutomationProperties.Name="界面文字大小"/><TextBlock Text="影响管理界面和区块标题；文件图标文字遵循 Windows 设置。" Style="{StaticResource SettingHint}"/>
+      <Button Content="恢复界面默认设置" Click="ResetInterface_Click" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource SettingCard}" Tag="Desktop|桌面 交互 区块 吸附 对齐 锁定 布局 胶囊 悬停 展开 拖入 空分类 刷新 文件变化"><StackPanel>
+      <TextBlock Text="桌面与交互" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="分类只改变显示归属；文件复制、移动、重命名和删除仍由 Windows 执行。" Style="{StaticResource SettingHint}"/>
+      <CheckBox x:Name="SnapBox" Content="移动和缩放时吸附对齐"/><TextBlock Text="靠近其他区块或屏幕边缘时对齐；按住 Alt 可暂时绕过。" Style="{StaticResource SettingHint}" Margin="24,2,0,12"/>
+      <CheckBox x:Name="LockBox" Content="锁定区块位置与大小"/><TextBlock Text="锁定后仍可打开文件、更改分类、折叠和展开。" Style="{StaticResource SettingHint}" Margin="24,2,0,12"/>
+      <Separator Margin="0,10"/><CheckBox x:Name="HoverBox" Content="悬停时临时展开折叠区块"/><CheckBox x:Name="DragExpandBox" Content="拖入文件时临时展开折叠区块"/><TextBlock Text="离开且操作结束后收起，保留原有折叠状态。" Style="{StaticResource SettingHint}" Margin="24,2,0,12"/>
+      <Separator Margin="0,10"/><CheckBox x:Name="HideEmptyBox" Content="隐藏没有项目的分类"/><CheckBox x:Name="AutoRefreshBox" Content="桌面文件变化后自动刷新"/><TextBlock Text="关闭自动刷新后，可通过“重新扫描”手动更新；不会自动移动新文件。" Style="{StaticResource SettingHint}" Margin="24,2,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource SettingCard}" Tag="AI|分类 离线 AI 密钥 API 模型 接口 BaseUrl 隐私 自动 手动 纠错"><StackPanel>
+      <TextBlock Text="分类与 AI" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="无需账号或密钥，离线规则即可分类。手动纠正始终优先；未知应用进入“待确认”。" Style="{StaticResource SettingHint}"/>
+      <CheckBox x:Name="EnabledBox" Content="启用 AI 增强识别" Checked="AiEnabled_Changed" Unchecked="AiEnabled_Changed"/>
+      <TextBlock Text="仅主动启用后，未识别项目的名称、路径和应用特征才会发送至配置的接口，不发送文件内容。" Style="{StaticResource SettingHint}"/>
+      <StackPanel x:Name="AiFields"><TextBlock Text="兼容接口 BaseUrl" Margin="0,8,0,8"/><TextBox x:Name="BaseUrlBox" AutomationProperties.Name="兼容接口 BaseUrl"/><TextBlock Text="模型名称" Margin="0,18,0,8"/><TextBox x:Name="ModelBox" AutomationProperties.Name="模型名称"/><TextBlock Text="API Key" Margin="0,18,0,8"/><PasswordBox x:Name="ApiKeyBox" AutomationProperties.Name="API Key"/></StackPanel>
+      <TextBlock Text="密钥保存在 Windows 凭据管理器，配置文件不保存密钥。" Style="{StaticResource SettingHint}" Margin="0,14,0,0"/>
+     </StackPanel></Border>
+     <Border Style="{StaticResource SettingCard}" Tag="Data|数据 关于 本地 隐私 导出 JSON 报表 目录 版本 WPF"><StackPanel>
+      <TextBlock Text="数据与关于" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="布局、界面选项与分类偏好保存在本机。沙盒备份与撤销位于管理面板的“备份与数据”。" Style="{StaticResource SettingHint}"/>
+      <TextBlock Text="本地数据目录" Margin="0,8,0,8"/><TextBox x:Name="DataPathBox" IsReadOnly="True" TextWrapping="Wrap"/>
+      <Button Content="导出当前分类 JSON" Click="Export_Click" HorizontalAlignment="Left" Margin="0,18,0,8"/><TextBlock Text="报表包含桌面项目路径；分享前请检查内容。" Style="{StaticResource SettingHint}"/>
+      <Separator Margin="0,12"/><TextBlock Text="SmartDeskBox" FontWeight="SemiBold"/><TextBlock Text="Windows 桌面分类工具 · WPF / .NET 10&#x0a;原生文件交互，独立实现。" Style="{StaticResource SettingHint}"/>
+     </StackPanel></Border>
+    </StackPanel>
+    <TextBlock x:Name="NoResults" Text="没有找到相关设置，请尝试“主题”“吸附”或“AI”。" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,20"/>
+   </StackPanel></ScrollViewer>
+  </Grid>
+  <Border Grid.Row="2" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Stroke}" BorderThickness="0,1,0,0" Padding="24,16"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,20,0" VerticalAlignment="Center"><TextBlock x:Name="FeedbackText" Text="保存后应用；取消不会更改当前设置。" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><Button Content="取消" IsCancel="True" Margin="0,0,10,0"/><Button Content="保存设置" IsDefault="True" Style="{StaticResource PrimaryButton}" Click="Save_Click"/></StackPanel></Grid></Border>
+ </Grid>
+</Window>

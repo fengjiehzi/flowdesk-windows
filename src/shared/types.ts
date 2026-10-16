@@ -6,4 +6,7 @@ export type IslandSnapshot = {
   compactMode: 'clock' | 'notification'
   settings: IslandSettings
   now: string
+  settingsRevision: number
 }
+
+export type SettingsUpdateResult = { settings: IslandSettings; settingsRevision: number }

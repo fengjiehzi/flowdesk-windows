@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const maxLauncherEntries = 8
 export const launcherNameSchema = z.string().trim().min(1).max(24)
 export const launcherIconSchema = z.string().startsWith('data:image/png;base64,').max(400_000)
-export const launcherEntryKindSchema = z.enum(['app', 'website'])
+export const launcherEntryKindSchema = z.enum(['app', 'website', 'file', 'script', 'folder'])
 
 export const launcherEntryViewSchema = z.object({
   id: z.string().uuid(),
@@ -14,8 +14,20 @@ export const launcherEntryViewSchema = z.object({
 
 export const launcherStateSchema = z.object({
   setupCompleted: z.boolean(),
-  entries: z.array(launcherEntryViewSchema).max(maxLauncherEntries)
+  entries: z.array(launcherEntryViewSchema).max(maxLauncherEntries),
+  localEntries: z.array(launcherEntryViewSchema.extend({ path: z.string() })).default([]),
+  recentEntries: z.array(launcherEntryViewSchema).max(50).default([])
 })
+
+export const launcherSearchSourceSchema = z.enum(['entry', 'local', 'recent', 'installed'])
+export const launcherSearchRequestSchema = z.object({ source: launcherSearchSourceSchema, id: z.string().min(1).max(64) }).strict()
+export type LauncherSearchRequest = z.infer<typeof launcherSearchRequestSchema>
+export type LauncherSearchItem = Omit<LauncherEntryView, 'id'> & LauncherSearchRequest & { detail: string }
+export type LauncherLaunchResult = { recentSaved: boolean }
+
+export function looksLikeLocalPath(value: string) {
+  return /^(?:[a-z]:[\\/]|\\\\)/i.test(value.trim().replace(/^"(.*)"$/, '$1'))
+}
 
 export const installedAppCandidateSchema = z.object({
   id: z.string().min(12).max(64),
@@ -45,6 +57,7 @@ export type DiscoveredApplication = {
   target: string
   identity?: string
   iconSource?: string
+  icon?: string
 }
 
 export type WindowsApplicationShortcut = {

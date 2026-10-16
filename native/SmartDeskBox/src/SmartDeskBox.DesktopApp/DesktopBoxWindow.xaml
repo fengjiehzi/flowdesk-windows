@@ -1,0 +1,21 @@
+<Window x:Class="SmartDeskBox.DesktopApp.DesktopBoxWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ WindowStyle="None" ResizeMode="NoResize" Background="{DynamicResource Surface}" Foreground="{DynamicResource Text}"
+ ShowInTaskbar="False" ShowActivated="False" WindowStartupLocation="Manual" MinWidth="220" MinHeight="48">
+ <Border x:Name="BoxBorder" BorderThickness="1" BorderBrush="{DynamicResource Stroke}">
+  <Grid><Grid.RowDefinitions><RowDefinition Height="46"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Border Background="{DynamicResource Sidebar}" BorderBrush="{DynamicResource Stroke}" BorderThickness="0,0,0,1"><Grid Margin="10,0,5,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <Thumb x:Name="MoveThumb" Cursor="SizeAll" DragStarted="Geometry_DragStarted" DragDelta="Move_DragDelta" DragCompleted="Geometry_DragCompleted" ToolTip="拖动标题移动；靠近边缘自动对齐，Alt 暂停吸附"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="Transparent"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="4"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <Border Width="3" Height="15" Background="{Binding Info.Color}" VerticalAlignment="Center"/>
+     <TextBlock Grid.Column="1" Text="{Binding Info.GroupLabel}" Foreground="{DynamicResource Muted}" FontSize="10" Margin="8,0" VerticalAlignment="Center"/>
+     <TextBlock Grid.Column="2" Text="{Binding Info.Name}" FontSize="{DynamicResource BodySize}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+     <TextBlock Grid.Column="3" Text="{Binding Items.Count}" Foreground="{DynamicResource Muted}" FontSize="11" Margin="8,0" VerticalAlignment="Center"/>
+    </Grid></Border></ControlTemplate></Thumb.Template></Thumb>
+    <Button Grid.Column="1" x:Name="CollapseButton" Content="{Binding ToggleGlyph}" Click="Collapse_Click" Padding="6,0" MinHeight="28" MinWidth="28" Background="Transparent" BorderBrush="Transparent" ToolTip="折叠 / 展开" AutomationProperties.Name="折叠或展开区块"/>
+    <Button Grid.Column="2" Content="⋯" Click="Menu_Click" Padding="6,0" MinHeight="28" MinWidth="28" Background="Transparent" BorderBrush="Transparent" ToolTip="区块设置与分类操作" AutomationProperties.Name="区块菜单"/>
+   </Grid></Border>
+   <Border x:Name="ShellContainer" Grid.Row="1" Margin="4,3,4,0" Visibility="{Binding ContentVisibility}"/>
+   <Grid Grid.Row="2" MinHeight="23" Visibility="{Binding ContentVisibility}"><TextBlock x:Name="FeedbackText" Text="双击打开 · 右键文件菜单" FontSize="10" Foreground="{DynamicResource Muted}" Margin="10,4,28,4" TextTrimming="CharacterEllipsis"/><Thumb x:Name="ResizeThumb" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="22" Height="22" Cursor="SizeNWSE" DragStarted="Geometry_DragStarted" DragDelta="Resize_DragDelta" DragCompleted="Geometry_DragCompleted" ToolTip="拖动调整大小；Alt 暂停吸附"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="Transparent"><TextBlock Text="◢" Foreground="{DynamicResource Muted}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></ControlTemplate></Thumb.Template></Thumb></Grid>
+  </Grid>
+ </Border>
+</Window>

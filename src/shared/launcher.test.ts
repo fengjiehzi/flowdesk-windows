@@ -5,12 +5,18 @@ import {
   isValidLauncherOrder,
   launcherStateSchema,
   maxLauncherEntries,
+  looksLikeLocalPath,
   normalizeWebsiteUrl
 } from './launcher'
 
 assert.equal(normalizeWebsiteUrl('example.com'), 'https://example.com/')
 assert.equal(normalizeWebsiteUrl('http://example.com/docs'), 'http://example.com/docs')
 assert.throws(() => normalizeWebsiteUrl('file:///C:/Windows'))
+assert.equal(looksLikeLocalPath('D:\\工具\\便携软件.exe'), true)
+assert.equal(looksLikeLocalPath('"D:\\工具\\脚本.cmd"'), true)
+assert.equal(looksLikeLocalPath('\\\\server\\share\\folder'), true)
+assert.equal(looksLikeLocalPath('https://example.com'), false)
+assert.equal(looksLikeLocalPath('relative-file.txt'), false)
 
 const shortcut = {
   name: 'Visual Studio Code',

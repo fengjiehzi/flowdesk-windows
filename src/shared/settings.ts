@@ -60,8 +60,36 @@ export const settingsSchema = z.object({
 export type IslandSettings = z.infer<typeof settingsSchema>
 export type FluidCloudSettings = IslandSettings['fluidCloud']
 export type FluidCloudCreation = IslandSettings['fluidCloudCreations'][number]
+export type IslandSettingsPatch = Omit<Partial<IslandSettings>, 'fluidCloud'> & { fluidCloud?: Partial<FluidCloudSettings> }
 
 export const defaultSettings = settingsSchema.parse({})
+
+export function recoverSettings(value: unknown): IslandSettings {
+  const input = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  const result: Record<string, unknown> = { ...defaultSettings }
+  for (const [key, schema] of Object.entries(settingsSchema.shape)) {
+    const parsed = schema.safeParse(input[key])
+    if (parsed.success) result[key] = parsed.data
+  }
+  const recoverCloud = (value: unknown) => {
+    const upgraded = upgradeFluidCloud(value)
+    const cloud = upgraded && typeof upgraded === 'object' && !Array.isArray(upgraded) ? upgraded as Record<string, unknown> : {}
+    return fluidCloudSchema.parse(Object.fromEntries(Object.entries(fluidCloudValueSchema.shape).map(([key, schema]) => {
+      const parsed = schema.safeParse(cloud[key])
+      return [key, parsed.success ? parsed.data : schema.parse(undefined)]
+    })))
+  }
+  result.fluidCloud = recoverCloud(input.fluidCloud)
+  result.mutedNotificationApps = (Array.isArray(input.mutedNotificationApps) ? input.mutedNotificationApps : [])
+    .flatMap((item) => { const parsed = mutedNotificationAppSchema.safeParse(item); return parsed.success ? [parsed.data] : [] }).slice(0, 100)
+  result.fluidCloudCreations = (Array.isArray(input.fluidCloudCreations) ? input.fluidCloudCreations : [])
+    .flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const parsed = fluidCloudCreationSchema.safeParse({ ...item, cloud: recoverCloud(item.cloud) })
+      return parsed.success ? [parsed.data] : []
+    }).slice(0, 32)
+  return settingsSchema.parse(result)
+}
 export const settingsPatchSchema = settingsSchema
   .omit({ fluidCloud: true })
   .partial()
