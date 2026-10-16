@@ -2,6 +2,7 @@ node_modules/
 out/
 dist/
 release/
+release-dev*/
 windows-dynamic-island/
 output/
 native/**/bin/

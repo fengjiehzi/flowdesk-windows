@@ -4,6 +4,14 @@
   "productName": "Windows 灵动岛",
   "description": "Windows 桌面状态与快捷控制中心",
   "author": "Windows Dynamic Island",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fengjiehzi/vibe-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fengjiehzi/vibe-flow/issues"
+  },
+  "homepage": "https://github.com/fengjiehzi/vibe-flow#readme",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",

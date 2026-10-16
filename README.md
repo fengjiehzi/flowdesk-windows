@@ -126,6 +126,13 @@ npm run pack:win
 ## 第三方来源
 
 FLUX Shader 算法改编自 [KTBOY/shuke-lab-flux](https://github.com/KTBOY/shuke-lab-flux)，按 MIT License 使用。项目未引入原仓库的品牌、Logo 或页面文案；完整声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 反馈与贡献
+
+欢迎通过 [Issues](https://github.com/fengjiehzi/vibe-flow/issues) 报告问题或提出功能建议。报告问题时请附 Windows 版本、应用版本、复现步骤和预期行为；日志与截图请先移除通知、剪贴板内容、个人路径和 API 密钥。
+
+代码贡献请基于 `main` 分支创建功能分支，再提交 Pull Request。保持改动范围集中，说明修改原因和直接相关的局部验证结果；涉及桌面文件操作时，请使用隔离的测试目录。
+
 ## 项目结构
 
 ```text
