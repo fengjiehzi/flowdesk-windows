@@ -4,6 +4,7 @@
   "productName": "Windows 灵动岛",
   "description": "Windows 桌面状态与快捷控制中心",
   "author": "Windows Dynamic Island",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/fengjiehzi/vibe-flow.git"

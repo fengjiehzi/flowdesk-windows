@@ -123,6 +123,10 @@ npm run pack:win
 | `npm run identity:dev` | 生成并注册开发包身份 |
 | `npm run pack:win` | 构建 Windows NSIS 安装包 |
 
+## 开源许可
+
+本项目采用 [MIT License](LICENSE) 开源。第三方代码和依赖遵循各自许可证，相关声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 第三方来源
 
 FLUX Shader 算法改编自 [KTBOY/shuke-lab-flux](https://github.com/KTBOY/shuke-lab-flux)，按 MIT License 使用。项目未引入原仓库的品牌、Logo 或页面文案；完整声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
