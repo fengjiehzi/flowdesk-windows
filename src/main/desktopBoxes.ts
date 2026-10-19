@@ -47,7 +47,7 @@ export class DesktopBoxesController {
       let ready = false
       let finished = false
       const timer = setTimeout(() => {
-        reject(new Error('桌面整理启动超时，请检查是否已有 SmartDeskBox 正在运行。'))
+        reject(new Error('桌面整理启动超时，请检查是否已有桌面整理模块正在运行。'))
         child.stdin.end()
       }, 60_000)
       const lines = createInterface({ input: child.stdout })
@@ -103,7 +103,7 @@ export class DesktopBoxesController {
 
   async command(input: unknown): Promise<DesktopBoxesState> {
     const action = desktopBoxesActionSchema.parse(input)
-    if (action === 'exit') throw new Error('退出命令仅由灵动岛主进程使用')
+    if (action === 'exit') throw new Error('退出命令仅由流屿桌面主进程使用')
     if (this.stopping) throw new Error('桌面整理正在退出，请稍后重试。')
     if (!this.child && action === 'hide') {
       this.options.enabled = false

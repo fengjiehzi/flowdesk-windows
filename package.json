@@ -1,9 +1,9 @@
 {
-  "name": "windows-dynamic-island",
-  "version": "1.0.35",
-  "productName": "Windows 灵动岛",
-  "description": "Windows 桌面状态与快捷控制中心",
-  "author": "Windows Dynamic Island",
+  "name": "flowdesk",
+  "version": "1.0.36",
+  "productName": "流屿桌面",
+  "description": "集快捷启动、通知提醒、剪贴板归档与桌面分类整理于一体的 Windows 桌面效率工具",
+  "author": "FlowDesk",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -48,7 +48,7 @@
   },
   "build": {
     "appId": "com.desktop.dynamicisland",
-    "productName": "Windows 灵动岛",
+    "productName": "流屿桌面",
     "asar": true,
     "forceCodeSigning": true,
     "directories": {
@@ -81,7 +81,7 @@
           "sha256"
         ]
       },
-      "artifactName": "Windows-Dynamic-Island-${version}-Setup.${ext}"
+      "artifactName": "FlowDesk-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,

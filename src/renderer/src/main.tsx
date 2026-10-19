@@ -549,7 +549,7 @@ function CloudStudio({
 
       <section className="studioWorkspace" aria-label="效果与预设">
         <div className="studioPreview" aria-label="流云实时预览">
-          <div className="studioPreviewHeading"><span>实时效果</span><small>{windowInteraction ? '移动窗口中 · 动画暂停' : '调整会即时应用到灵动岛'}</small></div>
+          <div className="studioPreviewHeading"><span>实时效果</span><small>{windowInteraction ? '移动窗口中 · 动画暂停' : '调整会即时应用到流屿桌面'}</small></div>
           <div className="studioPreviewModes" aria-label="预览外形">
             {(Object.keys(fluxPreviewSurfaces) as FluxPreviewSurface[]).map((surface) => (
               <button className={previewSurface === surface ? 'active' : ''} key={surface} type="button" aria-pressed={previewSurface === surface} onClick={() => setPreviewSurface(surface)}>{fluxPreviewSurfaces[surface].label}</button>
@@ -598,7 +598,7 @@ function CloudStudio({
         </div>
         <div className="studioSaveArea">
           <div className={`studioApplyStatus ${saveStatus}`} role="status" aria-live="polite">
-            <span>{!window.island ? '预览模式 · 不写入本地' : saveStatus === 'error' ? '应用失败 · 修改已保留' : saveStatus === 'saving' ? '正在应用调整…' : '调整已应用到灵动岛'}</span>
+            <span>{!window.island ? '预览模式 · 不写入本地' : saveStatus === 'error' ? '应用失败 · 修改已保留' : saveStatus === 'saving' ? '正在应用调整…' : '调整已应用到流屿桌面'}</span>
             {saveStatus === 'error' && <button type="button" onClick={onRetrySave}>重试</button>}
           </div>
           <label className="studioNameField"><span>方案名称<small>{dirty ? '方案尚未保存' : '方案已保存'}</small></span><input aria-label="方案名称" value={creationName} maxLength={24} onChange={(event) => setCreationName(event.target.value)} /></label>
@@ -650,12 +650,12 @@ function GeneralSettings({
     <div className="generalSettingsShell">
       <header className="generalSettingsHeader">
         <span><Settings size={22} /></span>
-        <div><small>WINDOWS DYNAMIC ISLAND</small><h1>通用设置</h1><p>管理灵动岛行为、系统通知和剪贴板归档。</p></div>
+        <div><small>FLOWDESK</small><h1>通用设置</h1><p>管理流屿桌面行为、系统通知和剪贴板归档。</p></div>
       </header>
       <div className="generalSettingsBody">
-        <section className="settingsCard inspectorGroup"><h3>灵动岛行为</h3>
-          <div className="shortcutSummary"><span><b>点击灵动岛展开</b><small>胶囊显示后点击展开；鼠标移开后自动隐藏</small></span></div>
-          <div className="shortcutSummary"><span><b>顶部边缘呼出</b><small>平时隐藏，在与灵动岛位置对齐的屏幕顶部停留约 0.45 秒显示胶囊</small></span></div>
+        <section className="settingsCard inspectorGroup"><h3>流屿桌面行为</h3>
+          <div className="shortcutSummary"><span><b>点击胶囊展开</b><small>胶囊显示后点击展开；鼠标移开后自动隐藏</small></span></div>
+          <div className="shortcutSummary"><span><b>顶部边缘呼出</b><small>平时隐藏，在与胶囊位置对齐的屏幕顶部停留约 0.45 秒显示胶囊</small></span></div>
           <div className="shortcutSummary"><span><b>全局快捷键</b><small>在当前屏幕显示小胶囊</small></span><kbd>Ctrl + Alt + Space</kbd></div>
           <RangeField label="移开后的隐藏延迟" value={settings.hideDelayMs} min={300} max={3000} step={100} display={`${settings.hideDelayMs}ms`} onChange={(hideDelayMs) => onSettingsChange({ hideDelayMs })} />
         </section>
@@ -1146,7 +1146,7 @@ function NotificationPanelContent({
       <div className="notificationListHeader">
         <span>{items.length} 组通知</span>
         <select aria-label="按通知来源筛选" value={sourceId} onChange={(event) => setSourceId(event.target.value)}><option value="all">全部来源</option>{state.sources.filter((source) => !source.muted).map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}</select>
-        {state.items.length > 0 && <button type="button" title="只清空灵动岛本次运行中的历史，不删除 Windows 系统通知" aria-label="清空灵动岛本次运行的通知历史" onClick={onClear}>清空本地</button>}
+        {state.items.length > 0 && <button type="button" title="只清空流屿桌面本次运行中的历史，不删除 Windows 系统通知" aria-label="清空流屿桌面本次运行的通知历史" onClick={onClear}>清空本地</button>}
       </div>
       <div className="notificationList">
         {items.length ? items.map((item) => (
@@ -1302,7 +1302,7 @@ function App() {
           snapshot.compactMode === 'notification' ? (
             <NotificationPreview state={notificationState} settings={snapshot.settings} />
           ) : (
-            <button className="compact" type="button" onClick={() => setExpanded(true)} aria-label="展开灵动岛">
+            <button className="compact" type="button" onClick={() => setExpanded(true)} aria-label="展开流屿桌面">
               <CloudBackdrop cloud={snapshot.settings.fluidCloud} palette={palette} active={surfaceActive} />
               <time>{time}</time><span className="pulse" />
               {notificationState.unreadCount > 0 && <span className={`islandUnreadDot ${notificationState.suppression !== 'accepts' ? 'quiet' : ''}`} aria-label={`${notificationState.unreadCount} 条未读通知`} />}
@@ -1328,7 +1328,7 @@ function App() {
                   </div>
                   <span className="panelClock" title={formatDate(date)}><time>{time}</time></span>
                   <div className="panelTools">
-                    <button className="roundButton" type="button" onClick={() => setExpanded(false)} aria-label="收起灵动岛" title="收起为小胶囊"><ChevronUp size={16} /></button>
+                    <button className="roundButton" type="button" onClick={() => setExpanded(false)} aria-label="收起流屿桌面" title="收起为小胶囊"><ChevronUp size={16} /></button>
                   </div>
                 </div>
 
@@ -1347,7 +1347,7 @@ function App() {
                     }}
                   />
                 </div>
-                <footer className="panelFooter" aria-label="灵动岛工具">
+                <footer className="panelFooter" aria-label="流屿桌面工具">
                   <button title="管理快捷入口" type="button" onClick={() => window.island?.openLauncherManager()}><Library size={14} />管理</button>
                   <button title="流云创作器" type="button" onClick={() => window.island?.openCreator()}><Waves size={14} />创作</button>
                   <button title="通用设置" type="button" onClick={() => window.island?.openSettings()}><Settings size={14} />设置</button>

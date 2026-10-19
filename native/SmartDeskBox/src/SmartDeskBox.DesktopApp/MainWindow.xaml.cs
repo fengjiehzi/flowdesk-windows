@@ -61,7 +61,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ApplyFilters();
         tray = new System.Windows.Forms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application, Text = "SmartDeskBox · 桌面分区", Visible = !embedded
+            Icon = System.Drawing.SystemIcons.Application, Text = "流屿桌面 · 桌面分区", Visible = !embedded
         };
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("显示桌面分区", null, async (_, _) => await Dispatcher.InvokeAsync(ShowDesktopAsync));
@@ -72,7 +72,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         menu.Items.Add("退出并恢复桌面", null, (_, _) => Dispatcher.Invoke(ExitDesktop));
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += async (_, _) => await Dispatcher.InvokeAsync(ShowDesktopAsync);
-        if (embedded) Title = "灵动岛 · 桌面整理";
+        if (embedded) Title = "流屿桌面 · 桌面整理";
         StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) Hide(); };
         SourceInitialized += (_, _) => ApplyNativeBackdrop();
         Closing += (_, e) =>
@@ -192,7 +192,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             LastOperationError = ex.Message;
             StatusText.Text = "操作未完成：" + ex.Message;
-            MessageBox.Show(this, ex.Message, "SmartDeskBox", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, ex.Message, "流屿桌面", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {

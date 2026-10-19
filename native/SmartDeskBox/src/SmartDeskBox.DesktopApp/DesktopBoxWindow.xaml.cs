@@ -45,7 +45,7 @@ public partial class DesktopBoxWindow : Window
         };
         ShellContainer.Child = ShellView;
         InitializeCapsule();
-        Title = "SmartDeskBox · " + box.Info.Name;
+        Title = "流屿桌面 · " + box.Info.Name;
         Box.PropertyChanged += Box_PropertyChanged;
         Closed += (_, _) => { IsClosed = true; Box.PropertyChanged -= Box_PropertyChanged; ShellView.Dispose(); };
     }

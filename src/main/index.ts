@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
 import { spawn } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import Store from 'electron-store'
 import path from 'node:path'
@@ -21,6 +22,11 @@ import type { DesktopBoxesAction, DesktopBoxesState } from '../shared/desktopBox
 // ponytail: required for Chromium GPU startup on systems with mixed physical/virtual display adapters.
 app.commandLine.appendSwitch('disable-gpu-sandbox')
 
+// Keep the existing profile and single-instance lock when the product name changes.
+const legacyUserDataPath = path.join(app.getPath('appData'), 'Windows 灵动岛')
+mkdirSync(legacyUserDataPath, { recursive: true })
+app.setPath('userData', legacyUserDataPath)
+
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const preloadPath = path.join(currentDir, '../preload/index.cjs')
 const iconPath = path.join(currentDir, '../../resources/app-icon.ico')
@@ -34,7 +40,7 @@ const fixedSurfaceWindows = {
 const globalShortcutAccelerator = 'Ctrl+Alt+Space'
 const transitionMs = 180
 const visibleTopOffset = 12
-const logPrefix = '[灵动岛]'
+const logPrefix = '[流屿桌面]'
 const themeLabels: Record<IslandSettings['theme'], string> = {
   graphite: '石墨黑',
   aurora: '极光绿',
@@ -299,8 +305,8 @@ function setNotificationHovered(hovered: boolean) {
 function rebuildTrayMenu() {
   if (!tray) return
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: shortcutRegistered ? `显示灵动岛 (${globalShortcutAccelerator})` : '显示灵动岛（快捷键不可用）', click: revealCompactOnCursorDisplay },
-    { label: '隐藏灵动岛', click: hideIsland },
+    { label: shortcutRegistered ? `显示流屿桌面 (${globalShortcutAccelerator})` : '显示流屿桌面（快捷键不可用）', click: revealCompactOnCursorDisplay },
+    { label: '隐藏流屿桌面', click: hideIsland },
     { label: '设置', click: () => void openSettingsWindow() },
     { label: '桌面整理', submenu: [
       { label: '显示桌面盒子', click: () => void runDesktopBoxesAction('show') },
@@ -806,7 +812,7 @@ async function createSurfaceWindow(surface: IslandSurface) {
 
 function createTray() {
   tray = new Tray(nativeImage.createFromPath(iconPath))
-  tray.setToolTip('Windows 灵动岛 · 点击胶囊展开')
+  tray.setToolTip('流屿桌面 · 点击胶囊展开')
   tray.on('click', revealCompactOnCursorDisplay)
   rebuildTrayMenu()
 }

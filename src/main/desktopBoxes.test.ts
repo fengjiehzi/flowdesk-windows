@@ -24,7 +24,7 @@ try {
   await controller.command('hide')
   assert.deepEqual(enabledChanges, [false], '模块未运行时也能关闭自动恢复')
   await assert.rejects(controller.command('delete'), /Invalid enum/)
-  await assert.rejects(controller.command('exit'), /仅由灵动岛主进程/)
+  await assert.rejects(controller.command('exit'), /仅由流屿桌面主进程/)
   await assert.rejects(controller.command('manage'), /协议测试不操作真实桌面/)
   assert.equal((await controller.command('state')).running, true)
   assert.equal(controller.getState().active, false)

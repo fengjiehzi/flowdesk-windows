@@ -46,7 +46,7 @@ export function LauncherWorkspace({ state, active, onStateChange, onManage, onCr
       void window.island.desktopBoxesCommand('manage').catch(reason => setError(reason instanceof Error ? reason.message : '无法打开桌面整理'))
     } },
     { id: 'manage', name: '本地启动管理', detail: '添加文件、文件夹或脚本', Icon: FolderPlus, action: onManage },
-    { id: 'creator', name: '流云创作器', detail: '调整灵动岛外观', Icon: Waves, action: onCreator },
+    { id: 'creator', name: '流云创作器', detail: '调整流屿桌面外观', Icon: Waves, action: onCreator },
     { id: 'settings', name: '设置', detail: '通知与通用设置', Icon: Settings, action: onSettings }
   ].filter(item => item.name.includes(query.trim()))
   const choiceCount = results.length + tools.length

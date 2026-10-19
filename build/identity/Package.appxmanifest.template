@@ -8,8 +8,8 @@
   IgnorableNamespaces="uap uap3 uap10 rescap">
   <Identity Name="{{PACKAGE_NAME}}" Publisher="{{PUBLISHER}}" Version="{{VERSION}}" ProcessorArchitecture="neutral" />
   <Properties>
-    <DisplayName>Windows 灵动岛</DisplayName>
-    <PublisherDisplayName>Windows Dynamic Island</PublisherDisplayName>
+    <DisplayName>流屿桌面</DisplayName>
+    <PublisherDisplayName>FlowDesk</PublisherDisplayName>
     <Logo>resources\app-icon.png</Logo>
     <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
   </Properties>
@@ -28,8 +28,8 @@
     <Application Id="NotificationBridge" Executable="{{EXECUTABLE}}" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
       <uap:VisualElements
         AppListEntry="none"
-        DisplayName="Windows 灵动岛通知桥接"
-        Description="Windows 灵动岛系统通知桥接"
+        DisplayName="流屿桌面通知桥接"
+        Description="流屿桌面系统通知桥接"
         BackgroundColor="transparent"
         Square150x150Logo="resources\app-icon.png"
         Square44x44Logo="resources\app-icon.png" />

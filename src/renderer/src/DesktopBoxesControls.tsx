@@ -22,7 +22,7 @@ export function DesktopBoxesControls({ active }: { active: boolean }) {
     setWorking(true)
     setError('')
     try {
-      if (!window.island) throw new Error('请在灵动岛桌面程序中使用桌面整理')
+      if (!window.island) throw new Error('请在流屿桌面程序中使用桌面整理')
       setState(await window.island.desktopBoxesCommand(action))
     } catch (reason) { setError(reason instanceof Error ? reason.message : '桌面整理操作失败') }
     finally { setWorking(false) }
