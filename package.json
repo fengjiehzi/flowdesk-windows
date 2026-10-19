@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fengjiehzi/vibe-flow.git"
+    "url": "git+https://github.com/fengjiehzi/flowdesk-windows.git"
   },
   "bugs": {
-    "url": "https://github.com/fengjiehzi/vibe-flow/issues"
+    "url": "https://github.com/fengjiehzi/flowdesk-windows/issues"
   },
-  "homepage": "https://github.com/fengjiehzi/vibe-flow#readme",
+  "homepage": "https://github.com/fengjiehzi/flowdesk-windows#readme",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",

@@ -21,7 +21,7 @@
 
 ### 直接安装
 
-前往 [Releases](https://github.com/fengjiehzi/vibe-flow/releases) 下载最新版安装包（`FlowDesk-*-Setup.exe` 或 `FlowDesk-*-Setup-DEV.exe`），双击并按向导完成安装。当前最新版本为 v1.0.36。
+前往 [Releases](https://github.com/fengjiehzi/flowdesk-windows/releases) 下载最新版安装包（`FlowDesk-*-Setup.exe` 或 `FlowDesk-*-Setup-DEV.exe`），双击并按向导完成安装。当前最新版本为 v1.0.36。
 
 > 带 `-DEV` 后缀的安装包使用开发证书签名，不是正式发布者签名，安装时 Windows 可能提示“未知发布者”或触发 SmartScreen。请只从本仓库 Releases 下载，并核对对应版本发布说明中的 SHA-256。
 
@@ -30,8 +30,8 @@
 基础开发需要 Windows 10/11、Node.js 20.19 或更高版本。
 
 ```powershell
-git clone https://github.com/fengjiehzi/vibe-flow.git
-cd vibe-flow
+git clone https://github.com/fengjiehzi/flowdesk-windows.git
+cd flowdesk-windows
 npm ci
 npm run dev
 ```
@@ -131,7 +131,7 @@ npm run pack:win
 
 ## 反馈与贡献
 
-欢迎通过 [Issues](https://github.com/fengjiehzi/vibe-flow/issues) 报告问题或提出功能建议。报告问题时请附 Windows 版本、应用版本、复现步骤和预期行为；日志与截图请先移除通知、剪贴板内容、个人路径和 API 密钥。
+欢迎通过 [Issues](https://github.com/fengjiehzi/flowdesk-windows/issues) 报告问题或提出功能建议。报告问题时请附 Windows 版本、应用版本、复现步骤和预期行为；日志与截图请先移除通知、剪贴板内容、个人路径和 API 密钥。
 
 代码贡献请基于 `main` 分支创建功能分支，再提交 Pull Request。保持改动范围集中，说明修改原因和直接相关的局部验证结果；涉及桌面文件操作时，请使用隔离的测试目录。
 
