@@ -70,6 +70,14 @@
         "to": "identity/WindowsDynamicIsland.Identity.msix"
       },
       {
+        "from": "build/identity/register-identity.ps1",
+        "to": "identity/register-identity.ps1"
+      },
+      {
+        "from": "build/identity/unregister-identity.ps1",
+        "to": "identity/unregister-identity.ps1"
+      },
+      {
         "from": "resources/app-icon.png",
         "to": "app-icon.png"
       }
