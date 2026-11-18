@@ -57,9 +57,11 @@ internal sealed class DesktopPopupListener : IDisposable
         if (!_enabled) return;
         foreach (var adapter in Adapters)
         {
-            var running = Process.GetProcessesByName(adapter.ProcessName).Length > 0;
+            var processes = Process.GetProcessesByName(adapter.ProcessName);
+            var running = processes.Length > 0;
+            foreach (var proc in processes) proc.Dispose();
             if (!running) SetStatus(adapter.Id, adapter.Name, "app-not-running");
-            else if (!_statuses.TryGetValue(adapter.Id, out var status) || status is "app-not-running" or "capturing")
+            else if (!_statuses.TryGetValue(adapter.Id, out var status) || status is "app-not-running" or "capturing" or "error")
                 SetStatus(adapter.Id, adapter.Name, "waiting");
         }
     }
@@ -68,41 +70,62 @@ internal sealed class DesktopPopupListener : IDisposable
     {
         var adapter = Adapters.FirstOrDefault(item => item.Id == appId);
         if (adapter is null) return;
-        var process = Process.GetProcessesByName(adapter.ProcessName).FirstOrDefault(item => item.MainWindowHandle != IntPtr.Zero);
-        if (process is null) return;
-        Native.ShowWindow(process.MainWindowHandle, 9);
-        Native.SetForegroundWindow(process.MainWindowHandle);
+        var processes = Process.GetProcessesByName(adapter.ProcessName);
+        try
+        {
+            var process = processes.FirstOrDefault(item => item.MainWindowHandle != IntPtr.Zero);
+            if (process is null) return;
+            Native.ShowWindow(process.MainWindowHandle, 9);
+            Native.SetForegroundWindow(process.MainWindowHandle);
+        }
+        finally
+        {
+            foreach (var proc in processes) proc.Dispose();
+        }
     }
 
     private void OnWinEvent(IntPtr hook, uint eventType, IntPtr hwnd, int objectId, int childId, uint threadId, uint time)
     {
-        if (!_enabled || hwnd == IntPtr.Zero) return;
+        if (!_enabled || hwnd == IntPtr.Zero || objectId != 0 || childId != 0) return;
         var root = Native.GetAncestor(hwnd, GaRoot);
         if (root == IntPtr.Zero) root = hwnd;
+        if (!Native.IsWindowVisible(root)) return;
+        var className = GetClassName(root);
+        if (!className.StartsWith("Chrome_WidgetWin_", StringComparison.Ordinal) && !className.Contains("QWindow", StringComparison.Ordinal))
+            return;
         lock (_pending)
         {
             if (!_pending.Add(root)) return;
         }
-        _ = Task.Delay(150).ContinueWith(_ =>
+        _ = Task.Run(async () =>
         {
-            if (_dispatcher.IsDisposed) return;
-            _dispatcher.BeginInvoke(() =>
+            try
+            {
+                await Task.Delay(150).ConfigureAwait(false);
+                await CaptureAsync(root).ConfigureAwait(false);
+            }
+            finally
             {
                 lock (_pending) _pending.Remove(root);
-                Capture(root);
-            });
-        }, TaskScheduler.Default);
+            }
+        });
     }
 
-    private void Capture(IntPtr hwnd)
+    private async Task CaptureAsync(IntPtr hwnd)
     {
         if (!_enabled || !TryGetCandidate(hwnd, out var adapter)) return;
         try
         {
-            var (title, body) = ExtractText(hwnd, adapter.Name);
+            // 在独立后台线程执行跨进程 UIA 并限时，避免挂死主消息循环。
+            var extractTask = Task.Run(() => ExtractText(hwnd, adapter.Name));
+            var completed = await Task.WhenAny(extractTask, Task.Delay(1500)).ConfigureAwait(false);
+            if (completed != extractTask) return;
+            var (title, body) = await extractTask.ConfigureAwait(false);
             var fingerprint = $"{adapter.Id}\0{hwnd}\0{title}\0{body}";
-            if (IsDuplicate(_recent, fingerprint, DateTime.UtcNow)) return;
-            SetStatus(adapter.Id, adapter.Name, "capturing");
+            bool duplicate;
+            lock (_recent) duplicate = IsDuplicate(_recent, fingerprint, DateTime.UtcNow);
+            if (duplicate) return;
+            PostStatus(adapter.Id, adapter.Name, "capturing");
             _write(new
             {
                 type = "desktopNotification",
@@ -120,12 +143,24 @@ internal sealed class DesktopPopupListener : IDisposable
         }
         catch (Exception error) when (error is UnauthorizedAccessException || error.HResult == unchecked((int)0x80070005))
         {
-            SetStatus(adapter.Id, adapter.Name, "integrity-mismatch");
+            PostStatus(adapter.Id, adapter.Name, "integrity-mismatch");
+        }
+        catch (ElementNotAvailableException)
+        {
+            // 弹窗在 150ms 延迟内关闭属于正常瞬态，不标为 error。
         }
         catch
         {
-            SetStatus(adapter.Id, adapter.Name, "error");
+            PostStatus(adapter.Id, adapter.Name, "error");
         }
+    }
+
+    private void PostStatus(string id, string name, string status)
+    {
+        if (_dispatcher.IsDisposed || !_dispatcher.IsHandleCreated) return;
+        try { _dispatcher.BeginInvoke(() => SetStatus(id, name, status)); }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 
     private static bool TryGetCandidate(IntPtr hwnd, out Adapter adapter)
@@ -146,11 +181,13 @@ internal sealed class DesktopPopupListener : IDisposable
 
         var className = GetClassName(hwnd);
         if (!ClassMatches(adapter.Id, className) || !Native.GetWindowRect(hwnd, out var rect)) return false;
+        var dpi = Native.GetDpiForWindow(hwnd);
+        var scale = dpi > 0 ? dpi / 96.0 : 1.0;
         var width = rect.Right - rect.Left;
         var height = rect.Bottom - rect.Top;
-        if (width is < 200 or > 720 || height is < 45 or > 420) return false;
+        if (width < 200 * scale || width > 720 * scale || height < 45 * scale || height > 420 * scale) return false;
         var screen = Screen.FromHandle(hwnd).Bounds;
-        var nearEdge = screen.Right - rect.Right <= 220 || rect.Top - screen.Top <= 100 || screen.Bottom - rect.Bottom <= 160;
+        var nearEdge = screen.Right - rect.Right <= 220 * scale || rect.Top - screen.Top <= 100 * scale || screen.Bottom - rect.Bottom <= 160 * scale;
         return nearEdge && width < screen.Width * .6 && height < screen.Height * .5;
     }
 
@@ -280,5 +317,7 @@ internal sealed class DesktopPopupListener : IDisposable
         internal static extern bool ShowWindow(IntPtr hwnd, int command);
         [DllImport("user32.dll")]
         internal static extern bool SetForegroundWindow(IntPtr hwnd);
+        [DllImport("user32.dll")]
+        internal static extern uint GetDpiForWindow(IntPtr hwnd);
     }
 }

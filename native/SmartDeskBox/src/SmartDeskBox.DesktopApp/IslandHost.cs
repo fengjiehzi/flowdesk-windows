@@ -60,11 +60,32 @@ public sealed class IslandHost : IDisposable
         Write(new { state = State() });
     }
 
+    private static async Task<string?> ReadLineBoundedAsync(System.IO.TextReader reader, int maxChars)
+    {
+        var buffer = new StringBuilder(128);
+        var ch = new char[1];
+        var overflow = false;
+        while (true)
+        {
+            var read = await reader.ReadAsync(ch, 0, 1).ConfigureAwait(false);
+            if (read == 0) return buffer.Length == 0 && !overflow ? null : overflow ? new string(' ', maxChars + 1) : buffer.ToString();
+            var c = ch[0];
+            if (c == '\n')
+            {
+                if (overflow) return new string(' ', maxChars + 1);
+                if (buffer.Length > 0 && buffer[^1] == '\r') buffer.Length--;
+                return buffer.ToString();
+            }
+            if (buffer.Length < maxChars) buffer.Append(c);
+            else overflow = true;
+        }
+    }
+
     private async Task ReadCommandsAsync()
     {
         try
         {
-            while (!disposed && await Console.In.ReadLineAsync().ConfigureAwait(false) is { } line)
+            while (!disposed && await ReadLineBoundedAsync(Console.In, 1024).ConfigureAwait(false) is { } line)
             {
                 int? id = null;
                 try
@@ -73,7 +94,10 @@ public sealed class IslandHost : IDisposable
                     using var document = JsonDocument.Parse(line);
                     id = document.RootElement.GetProperty("id").GetInt32();
                     var action = document.RootElement.GetProperty("action").GetString();
-                    await window.Dispatcher.InvokeAsync(() => ExecuteAsync(id.Value, action)).Task.Unwrap().ConfigureAwait(false);
+                    var accent = document.RootElement.TryGetProperty("accent", out var accentNode) && accentNode.ValueKind == JsonValueKind.String
+                        ? accentNode.GetString()
+                        : null;
+                    await window.Dispatcher.InvokeAsync(() => ExecuteAsync(id.Value, action, accent)).Task.Unwrap().ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -88,18 +112,25 @@ public sealed class IslandHost : IDisposable
         }
     }
 
-    private async Task ExecuteAsync(int id, string? action)
+    private async Task ExecuteAsync(int id, string? action, string? accent = null)
     {
-        if (action is not ("show" or "hide" or "manage" or "settings" or "refresh" or "state" or "exit"))
+        if (action is not ("show" or "hide" or "manage" or "settings" or "refresh" or "state" or "theme" or "exit"))
             throw new ArgumentException("不支持的桌面整理命令。");
-        if (action != "state" && (window.IsBusy || !window.IsEnabled || window.Desktop?.Windows.Any(box => box.HasActiveInteraction) == true))
+        if (action is not ("state" or "theme" or "exit") && (window.IsBusy || !window.IsEnabled || window.Desktop?.Windows.Any(box => box.HasActiveInteraction) == true))
             throw new InvalidOperationException("请先完成桌面文件操作或关闭设置窗口。");
-        if (probe && action is not ("state" or "exit")) throw new InvalidOperationException("协议测试不操作真实桌面。");
+        if (probe && action is not ("state" or "theme" or "exit")) throw new InvalidOperationException("协议测试不操作真实桌面。");
+        if (action == "exit")
+        {
+            foreach (var owned in window.OwnedWindows.Cast<Window>().ToArray()) owned.Close();
+        }
         switch (action)
         {
             case "show": window.Desktop?.Show(); break;
             case "hide": window.Desktop?.Hide(); break;
             case "manage": window.Show(); window.WindowState = WindowState.Normal; window.Activate(); break;
+            case "theme":
+                InterfaceTheme.SetIslandAccent(accent, window.Interface);
+                break;
             case "settings":
                 // A modal dialog must not prevent acknowledging this command.
                 _ = window.Dispatcher.BeginInvoke(new Action(window.OpenIslandSettings));

@@ -8,8 +8,24 @@ namespace SmartDeskBox.DesktopApp;
 
 public static class InterfaceTheme
 {
+    private static Color? islandAccent;
     public static event Action? Changed;
     public static bool IsDark { get; private set; }
+
+    public static void SetIslandAccent(string? hexColor, InterfaceSettings? currentSettings = null)
+    {
+        if (!string.IsNullOrWhiteSpace(hexColor))
+        {
+            try { islandAccent = (Color)ColorConverter.ConvertFromString(hexColor.Trim()); }
+            catch { islandAccent = null; }
+        }
+        else
+        {
+            islandAccent = null;
+        }
+        if (currentSettings is not null) Apply(currentSettings);
+    }
+
     public static void Apply(InterfaceSettings settings)
     {
         IsDark = settings.Theme == "Dark" || settings.Theme == "System" &&
@@ -21,7 +37,16 @@ public static class InterfaceTheme
         var resources = Application.Current.Resources;
         for (int index = 0; index < keys.Length; index++)
         {
-            Brush brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(values[index]));
+            var color = (Color)ColorConverter.ConvertFromString(values[index]);
+            if (islandAccent is { } accent)
+            {
+                if (keys[index] is "Accent" or "AccentFill") color = accent;
+                else if (keys[index] == "Selection")
+                    color = IsDark
+                        ? Color.FromRgb((byte)(accent.R * 0.25 + 18), (byte)(accent.G * 0.25 + 24), (byte)(accent.B * 0.25 + 36))
+                        : Color.FromRgb((byte)(accent.R * 0.18 + 205), (byte)(accent.G * 0.18 + 212), (byte)(accent.B * 0.18 + 224));
+            }
+            Brush brush = new SolidColorBrush(color);
             if (SystemParameters.HighContrast) brush = keys[index] switch
             {
                 "Text" or "Muted" or "Success" or "Danger" => SystemColors.WindowTextBrush,
@@ -31,6 +56,7 @@ public static class InterfaceTheme
                 "Selection" or "SurfaceHover" => SystemColors.ControlBrush,
                 _ => SystemColors.WindowBrush
             };
+            else if (brush.CanFreeze) brush.Freeze();
             resources[keys[index]] = brush;
         }
         resources["BodySize"] = settings.TextSize;

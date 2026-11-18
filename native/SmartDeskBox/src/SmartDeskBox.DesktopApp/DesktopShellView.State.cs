@@ -82,7 +82,7 @@ public sealed partial class DesktopShellView
         {
             if (view is not IFolderView items || ++attempts > 30) { stateTimer.Stop(); return; }
             var paths = VisiblePaths();
-            if (paths.Count != included.Count) return;
+            if (included.Count > 0 && paths.Count < included.Count && attempts < 6) return;
             stateTimer.Stop();
             try
             {

@@ -14,7 +14,7 @@ public sealed class DesktopSnapSession(Rect origin, IReadOnlyList<Rect> neighbor
         if (resize)
         {
             proposed.Width = Math.Clamp(origin.Width + displacement.X, 220 * scaleX, Math.Max(220 * scaleX, area.Right - origin.Left));
-            proposed.Height = Math.Clamp(origin.Height + displacement.Y, 130 * scaleY, Math.Max(130 * scaleY, area.Bottom - origin.Top));
+            proposed.Height = Math.Clamp(origin.Height + displacement.Y, 80 * scaleY, Math.Max(80 * scaleY, area.Bottom - origin.Top));
         }
         else
         {
@@ -52,7 +52,7 @@ public sealed class DesktopSnapSession(Rect origin, IReadOnlyList<Rect> neighbor
             resize ? proposed.Left + 220 * scaleX : area.Left,
             resize ? area.Right : Math.Max(area.Left, area.Right - proposed.Width));
         heldY = Snap(y, ys, heldY, scaleY,
-            resize ? proposed.Top + 130 * scaleY : area.Top,
+            resize ? proposed.Top + 80 * scaleY : area.Top,
             resize ? area.Bottom : Math.Max(area.Top, area.Bottom - proposed.Height));
         if (resize)
         {

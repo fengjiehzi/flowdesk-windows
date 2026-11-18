@@ -35,13 +35,27 @@ public partial class MainWindow
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
         { StatusText.Text = "设置未保存：" + exception.Message; }
     }
+    private System.Windows.Threading.DispatcherTimer? searchDebounce;
+
     private void Section_Checked(object sender, RoutedEventArgs e)
     {
         section = ((RadioButton)sender).Tag?.ToString() ?? "All";
         if (SearchBox is not null) ApplyFilters();
     }
     private void Search_Changed(object sender, TextChangedEventArgs e)
-    { if (BoxesControl is not null) ApplyFilters(); }
+    {
+        if (BoxesControl is null) return;
+        searchDebounce ??= CreateSearchDebounce();
+        searchDebounce.Stop();
+        searchDebounce.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer CreateSearchDebounce()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        timer.Tick += (_, _) => { timer.Stop(); ApplyFilters(); };
+        return timer;
+    }
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
     { SearchBox.Clear(); SearchBox.Focus(); }

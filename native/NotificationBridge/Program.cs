@@ -29,6 +29,11 @@ internal static class Program
             Console.WriteLine("Notification lifecycle checks passed (3 scenarios)");
             return;
         }
+        if (args.Contains("--discover-apps", StringComparer.OrdinalIgnoreCase))
+        {
+            AppDiscoveryService.WriteJson();
+            return;
+        }
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
             SelfTest();
@@ -91,10 +96,14 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
     private readonly UserNotificationListener _listener = UserNotificationListener.Current;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private readonly object _writeLock = new();
-    private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = 5000 };
+    private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) ? 15_000 : 5000 };
+    private readonly System.Windows.Forms.Timer _notifyDebounceTimer = new() { Interval = 150 };
+    private readonly Dictionary<string, string?> _iconCache = new(StringComparer.Ordinal);
     private readonly DesktopPopupListener _desktopPopups;
     private readonly ClipboardArchiveListener _clipboardArchive;
     private readonly NotificationSession _notifications = new();
+    private string? _lastSnapshotFingerprint;
+    private DateTime _lastServiceStartAttemptUtc = DateTime.MinValue;
     private bool _disposed;
 
     public BridgeContext()
@@ -103,9 +112,54 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         _desktopPopups = new DesktopPopupListener(_dispatcher, Write);
         _clipboardArchive = new ClipboardArchiveListener(Write);
         _statusTimer.Tick += async (_, _) => await PollStatusAsync();
+        _notifyDebounceTimer.Tick += async (_, _) =>
+        {
+            _notifyDebounceTimer.Stop();
+            if (!_disposed && _notifications.Enabled) await SyncAsync();
+        };
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            try { _listener.NotificationChanged += OnPlatformNotificationChanged; }
+            catch { /* 若系统未授予身份或监听受限，回退为定时轮询 */ }
+        }
         _statusTimer.Start();
         Write(new { type = "ready" });
         _ = Task.Run(ReadCommandsAsync);
+    }
+
+    private void OnPlatformNotificationChanged(UserNotificationListener sender, UserNotificationChangedEventArgs args)
+    {
+        if (_disposed || !_notifications.Enabled) return;
+        PostToUi(() =>
+        {
+            _notifyDebounceTimer.Stop();
+            _notifyDebounceTimer.Start();
+            return Task.CompletedTask;
+        });
+    }
+
+    private static async Task<string?> ReadLineBoundedAsync(TextReader reader, int maxChars)
+    {
+        var buffer = new System.Text.StringBuilder(128);
+        var ch = new char[1];
+        var overflow = false;
+        while (true)
+        {
+            var read = await reader.ReadAsync(ch, 0, 1).ConfigureAwait(false);
+            if (read == 0)
+            {
+                return buffer.Length == 0 && !overflow ? null : overflow ? new string(' ', maxChars + 1) : buffer.ToString();
+            }
+            var c = ch[0];
+            if (c == '\n')
+            {
+                if (overflow) return new string(' ', maxChars + 1);
+                if (buffer.Length > 0 && buffer[^1] == '\r') buffer.Length--;
+                return buffer.ToString();
+            }
+            if (buffer.Length < maxChars) buffer.Append(c);
+            else overflow = true;
+        }
     }
 
     private async Task ReadCommandsAsync()
@@ -114,10 +168,15 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         {
             while (!_disposed)
             {
-                var line = await Console.In.ReadLineAsync();
+                var line = await ReadLineBoundedAsync(Console.In, 4096);
                 if (line is null)
                 {
-                    Exit();
+                    PostToUi(async () =>
+                    {
+                        try { await _clipboardArchive.StopAndFlushAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
+                        catch { }
+                        finally { Exit(); }
+                    });
                     return;
                 }
                 if (line.Length > 4096)
@@ -205,20 +264,28 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         }
     }
 
-    private void OnUiThread(Func<Task> action)
+    private void OnUiThread(Func<Task> action) => PostToUi(action);
+
+    private void PostToUi(Func<Task> action)
     {
-        if (_disposed) return;
-        _dispatcher.BeginInvoke(async () =>
+        if (_disposed || _dispatcher.IsDisposed || !_dispatcher.IsHandleCreated) return;
+        try
         {
-            try
+            _dispatcher.BeginInvoke(async () =>
             {
-                await action();
-            }
-            catch (Exception error)
-            {
-                WriteError(error.Message);
-            }
-        });
+                if (_disposed) return;
+                try
+                {
+                    await action();
+                }
+                catch (Exception error)
+                {
+                    WriteError(error.Message);
+                }
+            });
+        }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 
     private async Task RequestAccessAsync()
@@ -285,11 +352,19 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
             }
             catch (Exception error) when (IsPlatformUnavailable(error))
             {
-                await StartNotificationServiceAsync();
+                if (DateTime.UtcNow - _lastServiceStartAttemptUtc >= TimeSpan.FromSeconds(60))
+                {
+                    _lastServiceStartAttemptUtc = DateTime.UtcNow;
+                    await StartNotificationServiceAsync();
+                }
                 platformNotifications = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
             }
-            var notifications = new List<object>(Math.Min(platformNotifications.Count, 100));
-            foreach (var notification in platformNotifications.OrderByDescending(item => item.CreationTime).Take(100))
+            var ordered = platformNotifications.OrderByDescending(item => item.CreationTime).Take(100).ToList();
+            var fingerprint = string.Join("|", ordered.Select(item => $"{item.Id}:{item.CreationTime.UtcTicks}"));
+            if (fingerprint == _lastSnapshotFingerprint) return;
+
+            var notifications = new List<object>(ordered.Count);
+            foreach (var notification in ordered)
             {
                 try
                 {
@@ -301,7 +376,11 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
                     // A malformed notification must not prevent the rest of the snapshot.
                 }
             }
-            if (!_disposed && _notifications.IsCurrent(version)) Write(new { type = "snapshot", notifications });
+            if (!_disposed && _notifications.IsCurrent(version))
+            {
+                _lastSnapshotFingerprint = fingerprint;
+                Write(new { type = "snapshot", notifications });
+            }
         }
         catch (Exception error)
         {
@@ -313,7 +392,7 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         }
     }
 
-    private static async Task<object?> ProjectAsync(UserNotification notification)
+    private async Task<object?> ProjectAsync(UserNotification notification)
     {
         var displayInfo = notification.AppInfo.DisplayInfo;
         var appName = Limit(displayInfo.DisplayName?.Trim() ?? string.Empty, 128);
@@ -324,7 +403,12 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         var textElements = binding?.GetTextElements();
         var title = Limit(textElements?.FirstOrDefault()?.Text ?? string.Empty, 256);
         var body = Limit(string.Join("\n", textElements?.Skip(1).Select(item => item.Text) ?? []), 2048);
-        var icon = await ReadIconAsync(displayInfo.GetLogo(new Windows.Foundation.Size(32, 32)));
+        if (!_iconCache.TryGetValue(appId, out var icon))
+        {
+            icon = await ReadIconAsync(displayInfo.GetLogo(new Windows.Foundation.Size(32, 32)));
+            if (_iconCache.Count >= 100) _iconCache.Clear();
+            _iconCache[appId] = icon;
+        }
 
         return new
         {
@@ -377,8 +461,10 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
 
     private void Exit()
     {
-        if (_disposed) return;
-        _dispatcher.BeginInvoke(ExitThread);
+        if (_disposed || _dispatcher.IsDisposed || !_dispatcher.IsHandleCreated) return;
+        try { _dispatcher.BeginInvoke(ExitThread); }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 
     protected override void ExitThreadCore()
@@ -391,7 +477,13 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            try { _listener.NotificationChanged -= OnPlatformNotificationChanged; }
+            catch { }
+        }
         Stop();
+        _notifyDebounceTimer.Dispose();
         _statusTimer.Dispose();
         _desktopPopups.Dispose();
         _clipboardArchive.Dispose();
@@ -415,6 +507,7 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         QueryUserNotificationState.PresentationMode => "presentation",
         QueryUserNotificationState.AcceptsNotifications => "accepts",
         QueryUserNotificationState.QuietTime => "quiet",
+        QueryUserNotificationState.App => "accepts",
         _ => "unknown"
     };
 
@@ -439,7 +532,7 @@ internal sealed class BridgeContext : ApplicationContext, IDisposable
         }
         catch (OperationCanceledException)
         {
-            process.Kill();
+            process.Kill(entireProcessTree: true);
         }
     }
 }

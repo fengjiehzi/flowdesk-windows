@@ -47,7 +47,12 @@ public sealed partial class DesktopShellView
         editTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         editTimer.Tick += (_, _) =>
         {
-            if (view is null || ++attempts > 100) { editTimer.Stop(); return; }
+            if (view is null || ++attempts > 100)
+            {
+                editTimer.Stop();
+                receivingNativeDrop = false;
+                return;
+            }
             int index = VisiblePaths().ToList().FindIndex(candidate => candidate.Equals(path, StringComparison.OrdinalIgnoreCase));
             if (index < 0) return;
             editTimer.Stop();
@@ -58,6 +63,7 @@ public sealed partial class DesktopShellView
                 finally { Marshal.FreeCoTaskMem(pidl); }
             }
             catch (COMException exception) { Feedback?.Invoke("新项目原位编辑失败：" + exception.Message); }
+            finally { receivingNativeDrop = false; }
         };
         editTimer.Start();
     }

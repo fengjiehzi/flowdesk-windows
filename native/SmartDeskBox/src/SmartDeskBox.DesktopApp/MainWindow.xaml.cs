@@ -25,6 +25,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private Point dragStart;
     private ItemViewModel? dragItem;
     private DesktopSession? desktopSession;
+    private readonly bool embedded;
     private bool exitRequested;
     public bool IsBusy => busy;
     public string? LastOperationError { get; private set; }
@@ -45,6 +46,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public MainWindow(WorkspacePaths workspace, bool autoScan, bool embedded = false)
     {
+        this.embedded = embedded;
         paths = workspace;
         store = new(paths.DatabasePath);
         organizer = new(paths, store);
@@ -87,8 +89,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             Microsoft.Win32.SystemEvents.UserPreferenceChanged -= SystemThemeChanged;
             desktopSession?.Dispose();
+            SqliteCacheStore.ClosePools();
             tray.Visible = false; tray.ContextMenuStrip?.Dispose(); tray.Dispose();
-            if (desktopSession != null) Application.Current.Shutdown();
+            if (desktopSession != null || embedded) Application.Current.Shutdown();
         };
         if (autoScan) Loaded += async (_, _) => await ScanAsync();
         else if (!StatusText.Text.StartsWith("界面配置")) StatusText.Text = "就绪 · 分类不搬动文件，手动文件操作作用于原文件";
@@ -163,8 +166,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         classified = items;
         foreach (var box in Boxes)
         {
+            var next = classified.Where(x => x.Result.Category == box.Info.Category).ToList();
+            var unchanged = box.Items.Count == next.Count && !box.Items.Where((vm, idx) =>
+                vm.Item.Metadata.ItemId != next[idx].Metadata.ItemId ||
+                vm.Item.Result != next[idx].Result).Any();
+            if (unchanged) continue;
             box.Items.Clear();
-            foreach (var item in classified.Where(x => x.Result.Category == box.Info.Category)) box.Items.Add(new(item));
+            foreach (var item in next) box.Items.Add(new(item));
         }
         TotalText.Text = classified.Count.ToString("D2");
         AllCount.Text = classified.Count.ToString();
@@ -192,7 +200,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             LastOperationError = ex.Message;
             StatusText.Text = "操作未完成：" + ex.Message;
-            MessageBox.Show(this, ex.Message, "流屿桌面", MessageBoxButton.OK, MessageBoxImage.Warning);
+            if (!embedded || IsVisible) MessageBox.Show(this, ex.Message, "流屿桌面", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -227,7 +235,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var report = await organizer.OrganizeDesktopAsync(classified);
         var summary = $"批次 {report.BatchId} 已完成：复制 {report.CopiedCount} 项，轻量映射 {report.PlaceholderCount} 项。";
         StatusText.Text = summary + "  原始桌面保持完整。";
-        MessageBox.Show(this, summary + "\n\n沙盒位置：" + report.SandboxPath, "备份完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        if (!embedded || IsVisible) MessageBox.Show(this, summary + "\n\n沙盒位置：" + report.SandboxPath, "备份完成", MessageBoxButton.OK, MessageBoxImage.Information);
     });
 
     private async void Rollback_Click(object sender, RoutedEventArgs e) => await RunActionAsync("正在校验并撤销上次沙盒备份…", async () =>

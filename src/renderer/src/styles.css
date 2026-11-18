@@ -251,8 +251,22 @@ button {
 .surface-launcher {
   overflow: hidden;
   background:
-    radial-gradient(circle at 76% -20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 38%),
-    linear-gradient(145deg, color-mix(in srgb, var(--bg) 94%, #152231), var(--panel));
+    radial-gradient(circle at 76% -20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 40%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg) 76%, transparent), color-mix(in srgb, var(--panel) 80%, transparent));
+}
+
+.studioHeader,
+.generalSettingsHeader,
+.launcherManagerHeader {
+  -webkit-app-region: drag;
+  padding-right: 148px;
+}
+
+.studioHeader button,
+.studioHeader input,
+.generalSettingsHeader button,
+.launcherManagerHeader button {
+  -webkit-app-region: no-drag;
 }
 
 .surface-creator .surfaceFrame,
@@ -290,9 +304,9 @@ button {
 }
 
 .generalSettingsHeader small {
-  color: color-mix(in srgb, var(--accent) 62%, var(--fg));
+  color: color-mix(in srgb, var(--accent) 72%, var(--fg));
   font-family: Consolas, monospace;
-  font-size: 8px;
+  font-size: 11px;
   letter-spacing: .13em;
 }
 
@@ -305,8 +319,8 @@ button {
 
 .generalSettingsHeader p {
   margin: 0;
-  color: color-mix(in srgb, var(--fg) 42%, transparent);
-  font-size: 10px;
+  color: color-mix(in srgb, var(--fg) 68%, transparent);
+  font-size: 12px;
 }
 
 .generalSettingsBody {
@@ -328,9 +342,9 @@ button {
   color: color-mix(in srgb, var(--fg) 55%, transparent);
 }
 
-.stage.surface-creator { --text-body: 13px; --text-support: 12px; background: var(--bg); }
+.stage.surface-creator { --text-body: 13px; --text-support: 12px; background: color-mix(in srgb, var(--bg) 80%, transparent); }
 .studioShell { width: 100%; height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: 72px minmax(0, 1fr); color: var(--fg); font-size: 13px; }
-.studioHeader { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 24px; border-bottom: 1px solid var(--hairline); }
+.studioHeader { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 148px 0 24px; border-bottom: 1px solid var(--hairline); }
 .studioHeader h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.03em; }
 .studioHeader p { margin: 4px 0 0; color: color-mix(in srgb, var(--fg) 55%, transparent); font-size: 12px; }
 .studioToolbar, .studioHistory { display: flex; align-items: center; gap: 8px; }
@@ -518,7 +532,7 @@ button {
   justify-content: space-between;
   gap: 24px;
   border-bottom: 1px solid var(--hairline);
-  padding: 20px 24px;
+  padding: 20px 148px 20px 24px;
   background: color-mix(in srgb, var(--panel) 76%, transparent);
   backdrop-filter: blur(22px);
 }
@@ -528,7 +542,7 @@ button {
   margin-bottom: 4px;
   color: var(--accent);
   font-family: Consolas, monospace;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
 }
@@ -543,8 +557,8 @@ button {
 
 .launcherManagerHeader p {
   margin: 3px 0 0;
-  color: color-mix(in srgb, var(--fg) 50%, transparent);
-  font-size: 11px;
+  color: color-mix(in srgb, var(--fg) 68%, transparent);
+  font-size: 12px;
 }
 
 .launcherHeaderActions {
@@ -1463,12 +1477,16 @@ select:focus-visible {
 
 .panelTabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 4px;
+  min-width: 0;
 }
 
-.panelTabs button {
+.panelTabs [role='tab'] {
+  position: relative;
   height: 26px;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 5px;
   border: 0;
@@ -1478,11 +1496,20 @@ select:focus-visible {
   background: transparent;
   cursor: pointer;
   font-size: 10px;
+  white-space: nowrap;
 }
 
-.panelTabs button.active {
+.panelTabs [role='tab'][aria-selected='true'] {
   color: var(--fg);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.panelTabs [role='tab'][aria-selected='true']::after {
+  position: absolute;
+  inset: auto 7px 0;
+  border-block-end: 2px solid var(--accent);
+  content: '';
+  pointer-events: none;
 }
 
 .panelTabs i {
@@ -1619,13 +1646,13 @@ select:focus-visible {
 }
 
 .notificationToggle b {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .notificationToggle small {
-  color: color-mix(in srgb, var(--fg) 38%, transparent);
-  font-size: 8px;
+  color: color-mix(in srgb, var(--fg) 66%, transparent);
+  font-size: 11px;
 }
 
 .notificationToggle input,
@@ -1673,12 +1700,12 @@ select:focus-visible {
 }
 
 .clipboardArchiveDirectory b {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .clipboardArchiveDirectory small {
-  color: color-mix(in srgb, var(--fg) 34%, transparent);
-  font-size: 7px;
+  color: color-mix(in srgb, var(--fg) 64%, transparent);
+  font-size: 11px;
 }
 
 .shortcutSummary {
@@ -1699,22 +1726,22 @@ select:focus-visible {
 }
 
 .shortcutSummary b {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .shortcutSummary small {
-  color: color-mix(in srgb, var(--fg) 38%, transparent);
-  font-size: 7px;
+  color: color-mix(in srgb, var(--fg) 66%, transparent);
+  font-size: 11px;
 }
 
 .shortcutSummary kbd {
   border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
   border-radius: 7px;
   padding: 6px 8px;
-  color: color-mix(in srgb, var(--fg) 78%, var(--accent));
+  color: color-mix(in srgb, var(--fg) 84%, var(--accent));
   background: color-mix(in srgb, var(--bg) 72%, transparent);
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--fg) 12%, transparent);
-  font: 8px Consolas, monospace;
+  font: 11px Consolas, monospace;
   white-space: nowrap;
 }
 
@@ -1805,13 +1832,31 @@ select:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  html,
+  body {
+    scroll-behavior: auto;
+  }
+
+  .pulse,
+  .spinning,
+  .dashboardPanel,
+  .panel::after,
+  .notificationPreview {
+    animation: none;
+  }
+
+  .compact,
+  .panel,
+  .islandMorphShell,
+  .morphLayer,
+  .roundButton,
+  .launcherTile {
+    transform: none;
+    transition:
+      opacity 140ms ease,
+      color 140ms ease,
+      background-color 140ms ease,
+      border-color 140ms ease;
   }
 }
 
@@ -2037,7 +2082,7 @@ input[aria-invalid='true'] { border-color: var(--status-error); }
 .launchGroup header button { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--launch-muted); font-size: 11px; cursor: pointer; padding: 3px 0 3px 8px; }
 .launchGroup header button:hover { color: var(--fg); }
 .launchIconGrid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; }
-.launchWorkspaceTile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; height: 72px; min-width: 0; border: 0; border-radius: 10px; padding: 7px 5px; background: transparent; color: var(--fg); cursor: pointer; }
+.launchWorkspaceTile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; height: 72px; min-width: 0; border: 0; border-radius: 10px; padding: 7px 5px; background: transparent; color: var(--fg); cursor: pointer; }
 .launchWorkspaceTile > span { display: grid; place-items: center; height: 32px; color: var(--accent); }
 .launchWorkspaceTile img { width: 32px; height: 32px; object-fit: contain; }
 .launchWorkspaceTile b { display: block; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 450; text-align: center; }
@@ -2121,5 +2166,319 @@ input[aria-invalid='true'] { border-color: var(--status-error); }
   .studioHeader { padding-inline: 16px; gap: 12px; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .notificationPreview .cloudBackdrop::after, .panel > .cloudBackdrop::after { background: var(--panel); }
+  .notificationPreview .cloudBackdrop::after,
+  .panel > .cloudBackdrop::after,
+  .islandMorphShell.mode-notification > .cloudBackdrop::after,
+  .islandMorphShell.mode-expanded > .cloudBackdrop::after {
+    background: var(--panel);
+  }
+}
+
+/* 顶部 2px 边缘透明感应层：保持最低非零不透明度以确保 Windows DWM 分发指针命中事件 */
+.edgeSensor {
+  width: 100vw;
+  height: 100vh;
+  background: rgb(0 0 0 / 0.5%);
+}
+
+/* 单窗口连续弹性形变容器（小胶囊 <-> 通知胶囊 <-> 展开面板） */
+.surface-island .surfaceFrame {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12px;
+}
+
+.surface-island.pos-left .surfaceFrame {
+  justify-content: flex-start;
+}
+
+.surface-island.pos-right .surfaceFrame {
+  justify-content: flex-end;
+}
+
+@media (max-width: 220px) {
+  .surface-island .surfaceFrame {
+    padding: 8px;
+  }
+}
+
+.islandMorphShell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--fg) 72%, transparent);
+  background: transparent;
+  box-shadow:
+    inset 0 1px 2px rgb(255 255 255 / 72%),
+    inset 0 -12px 20px rgb(0 0 0 / 18%),
+    0 22px 36px -16px rgb(0 0 0 / 42%),
+    0 3px 8px rgb(0 0 0 / 18%);
+  opacity: 0;
+  transform: translateY(-6px) scale(0.96);
+  transform-origin: top center;
+  pointer-events: none;
+  will-change: width, height, border-radius, transform, opacity;
+  transition:
+    width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.surface-island.pos-left .islandMorphShell {
+  transform-origin: top left;
+}
+
+.surface-island.pos-right .islandMorphShell {
+  transform-origin: top right;
+}
+
+.isActive .islandMorphShell {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.islandMorphShell.mode-compact {
+  width: 148px;
+  height: 40px;
+  border-radius: 24px;
+}
+
+.islandMorphShell.mode-notification {
+  width: min(430px, 100%);
+  height: 68px;
+  border-radius: 34px;
+}
+
+.islandMorphShell.mode-expanded {
+  width: min(784px, 100%);
+  height: min(464px, 100%);
+  border-color: color-mix(in srgb, var(--fg) 24%, transparent);
+  border-radius: 36px;
+  box-shadow:
+    inset 0 1px 2px rgb(255 255 255 / 22%),
+    inset 0 -12px 20px rgb(0 0 0 / 18%),
+    0 12px 26px rgb(2 4 7 / 36%);
+}
+
+.islandMorphShell::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--bg) 84%, var(--panel));
+  opacity: 0;
+  content: '';
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.islandMorphShell.mode-expanded::before {
+  opacity: var(--alpha);
+}
+
+.islandMorphShell.mode-expanded > .cloudBackdrop {
+  opacity: var(--alpha);
+}
+
+.islandMorphShell.mode-notification > .cloudBackdrop::after {
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--panel) 64%, transparent);
+}
+
+.islandMorphShell.mode-expanded > .cloudBackdrop::after {
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--panel) 48%, transparent),
+    color-mix(in srgb, var(--panel) 80%, transparent) 40%,
+    color-mix(in srgb, var(--panel) 88%, transparent)
+  );
+}
+
+.morphLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.morphLayer.isLayerActive {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.compactMorphContent {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border: 0;
+  border-radius: inherit;
+  padding: 0 18px 0 24px;
+  color: var(--fg);
+  background: transparent;
+  cursor: pointer;
+  font-size: 19px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px var(--bg), 0 0 10px var(--bg);
+}
+
+.compactMorphContent:active {
+  transform: scale(0.98);
+}
+
+.morphNotificationLayer .notificationPreview.sharedBackdrop {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+.morphExpandedLayer.launcherWorkspaceShell {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+/* 固定入口 Alt+1..8 速启角标 */
+.tileShortcutHint {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  min-width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 0 3px;
+  color: var(--launch-muted);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  font: 9px Consolas, monospace;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.launchWorkspaceTile:hover .tileShortcutHint,
+.launchWorkspaceTile:focus-visible .tileShortcutHint {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* 自定义全局快捷键录制器 */
+.shortcutRecorderRow {
+  flex-wrap: wrap;
+}
+
+.shortcutRecorderControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shortcutConflictBadge {
+  border: 1px solid color-mix(in srgb, var(--status-error) 55%, transparent);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.shortcutRecordButton,
+.shortcutResetButton {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: color-mix(in srgb, var(--fg) 88%, var(--accent));
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  cursor: pointer;
+  font: 11px Consolas, monospace;
+  white-space: nowrap;
+}
+
+.shortcutResetButton {
+  width: 30px;
+  padding: 0;
+  border-color: var(--hairline-strong);
+  color: color-mix(in srgb, var(--fg) 68%, transparent);
+}
+
+.shortcutRecordButton:hover,
+.shortcutResetButton:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+  background: var(--card-hover);
+}
+
+.shortcutRecordButton.isRecording {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+}
+
+.shortcutRecordButton.hasConflict {
+  border-color: var(--status-error);
+}
+
+/* 剪贴板历史页签 */
+.clipboardHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clipboardItemIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.clipboardActionHint {
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 3px 7px;
+  color: color-mix(in srgb, var(--accent) 78%, var(--fg));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .islandMorphShell {
+    transition: opacity 140ms ease;
+  }
 }

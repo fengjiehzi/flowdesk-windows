@@ -50,25 +50,34 @@ public partial class DesktopBoxWindow : Window
         Closed += (_, _) => { IsClosed = true; Box.PropertyChanged -= Box_PropertyChanged; ShellView.Dispose(); };
     }
 
+    private double CollapsedPhysicalHeight()
+    {
+        var scaleY = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        return Math.Round(48 * (scaleY > 0 ? scaleY : 1.0));
+    }
+
     public void Attach(IntPtr desktopHost, Rect bounds)
     {
         host = desktopHost;
-        expandedHeight = bounds.Height;
-        Width = bounds.Width;
-        Height = Box.IsCollapsed ? 48 : bounds.Height;
-        Left = bounds.Left;
-        Top = bounds.Top;
-        new WindowInteropHelper(this).Owner = host;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        var scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+        expandedHeight = Math.Max(80 * scaleY, bounds.Height);
+        Width = bounds.Width / scaleX;
+        Height = Box.IsCollapsed ? 48 : expandedHeight / scaleY;
+        Left = bounds.Left / scaleX;
+        Top = bounds.Top / scaleY;
         Show();
         Handle = DesktopNative.Attach(this, host);
         RegisterHeaderDrop();
-        DesktopNative.Place(Handle, host, new(bounds.Location, new Size(bounds.Width, Box.IsCollapsed ? 48 : bounds.Height)));
+        DesktopNative.Place(Handle, host, new(bounds.Location, new Size(bounds.Width, Box.IsCollapsed ? CollapsedPhysicalHeight() : expandedHeight)));
     }
 
     public void SetBounds(Rect bounds)
     {
-        expandedHeight = Math.Max(80, bounds.Height);
-        DesktopNative.Place(Handle, host, new(bounds.Location, new Size(bounds.Width, Box.IsCollapsed ? 48 : expandedHeight)));
+        var scaleY = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        expandedHeight = Math.Max(80 * (scaleY > 0 ? scaleY : 1.0), bounds.Height);
+        DesktopNative.Place(Handle, host, new(bounds.Location, new Size(bounds.Width, Box.IsCollapsed ? CollapsedPhysicalHeight() : expandedHeight)));
     }
 
     private void Move_DragDelta(object sender, DragDeltaEventArgs e)
@@ -102,10 +111,13 @@ public partial class DesktopBoxWindow : Window
         else dragDisplacement += new Vector(e.HorizontalChange * dpi.DpiScaleX, e.VerticalChange * dpi.DpiScaleY);
         var proposed = geometry.Origin;
         if (!resize) proposed.Offset(dragDisplacement);
-        var bounds = geometry.Resolve(dragDisplacement, DesktopLayout.WorkAreaFor(proposed), resize, !settings.SnapEnabled || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
+        var workArea = !resize && dragPointer is not null
+            ? DesktopLayout.WorkAreaForPoint(System.Windows.Forms.Cursor.Position)
+            : DesktopLayout.WorkAreaFor(proposed);
+        var bounds = geometry.Resolve(dragDisplacement, workArea, resize, !settings.SnapEnabled || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
         if (resize) SetBounds(bounds);
         else DesktopNative.Place(Handle, host, bounds);
-        if (geometry.IsSnapped) BoxBorder.BorderBrush = SystemColors.HighlightBrush;
+        if (geometry.IsSnapped) BoxBorder.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, "Accent");
         else BoxBorder.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, "Stroke");
     }
 
@@ -121,7 +133,7 @@ public partial class DesktopBoxWindow : Window
             if (temporaryExpansion)
             {
                 var bounds = DesktopNative.Bounds(Handle);
-                capsuleAnchor = new(bounds.Location, new Size(bounds.Width, 48));
+                capsuleAnchor = new(bounds.Location, new Size(bounds.Width, CollapsedPhysicalHeight()));
             }
             save(this);
         }
@@ -150,7 +162,7 @@ public partial class DesktopBoxWindow : Window
     {
         if (e.PropertyName != nameof(CategoryBox.IsCollapsed) || Handle == IntPtr.Zero || !IsDesktopAttached) return;
         var bounds = DesktopNative.Bounds(Handle);
-        bounds.Height = Box.IsCollapsed ? 48 : expandedHeight;
+        bounds.Height = Box.IsCollapsed ? CollapsedPhysicalHeight() : expandedHeight;
         DesktopNative.Place(Handle, host, bounds);
         if (!changingTemporarily) save(this);
     }

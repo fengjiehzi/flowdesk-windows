@@ -21,7 +21,7 @@
 
 ### 直接安装
 
-前往 [Releases](https://github.com/fengjiehzi/flowdesk-windows/releases) 下载最新版安装包（`FlowDesk-*-Setup.exe` 或 `FlowDesk-*-Setup-DEV.exe`），双击并按向导完成安装。当前最新版本为 v1.0.36。
+前往 [Releases](https://github.com/fengjiehzi/flowdesk-windows/releases) 下载最新版安装包（`FlowDesk-*-Setup.exe` 或 `FlowDesk-*-Setup-DEV.exe`），双击并按向导完成安装。当前最新版本为 v1.0.37。
 
 > 带 `-DEV` 后缀的安装包使用开发证书签名，不是正式发布者签名，安装时 Windows 可能提示“未知发布者”或触发 SmartScreen。请只从本仓库 Releases 下载，并核对对应版本发布说明中的 SHA-256。
 

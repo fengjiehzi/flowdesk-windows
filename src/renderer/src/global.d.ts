@@ -1,14 +1,14 @@
 import type { IslandSettingsPatch } from '../../shared/settings'
 import type { InstalledAppCandidate, LauncherState, WebsiteShortcutInput, LauncherSearchItem, LauncherSearchRequest, LauncherLaunchResult } from '../../shared/launcher'
 import type { NotificationCenterState } from '../../shared/notifications'
-import type { IslandSnapshot, SettingsUpdateResult } from '../../shared/types'
+import type { IslandPanelView, IslandSnapshot, SettingsUpdateResult } from '../../shared/types'
 import type { DesktopBoxesAction, DesktopBoxesState } from '../../shared/desktopBoxes'
 
 declare global {
   interface Window {
     island?: {
       getDesktopBoxesState: () => Promise<DesktopBoxesState>
-      desktopBoxesCommand: (action: Exclude<DesktopBoxesAction, 'exit'>) => Promise<DesktopBoxesState>
+      desktopBoxesCommand: (action: Exclude<DesktopBoxesAction, 'exit' | 'theme'>) => Promise<DesktopBoxesState>
       onDesktopBoxesState: (callback: (state: DesktopBoxesState) => void) => () => void
       getSnapshot: () => Promise<IslandSnapshot>
       updateSettings: (patch: IslandSettingsPatch) => Promise<SettingsUpdateResult>
@@ -36,8 +36,11 @@ declare global {
       clearNotificationHistory: () => Promise<void>
       openNotificationSettings: () => Promise<void>
       openClipboardArchiveDirectory: () => Promise<void>
+      copyClipboardItem: (id: string) => Promise<boolean>
+      clearClipboardItems: () => Promise<void>
       openNotificationSource: (appId: string) => Promise<void>
-      openPanel: (view: 'launcher' | 'notifications') => void
+      openPanel: (view: IslandPanelView) => void
+      notifyEdgeTrigger: () => void
       setNotificationPreviewHovered: (hovered: boolean) => void
       openLauncherManager: () => void
       setExpanded: (expanded: boolean) => void
@@ -48,7 +51,7 @@ declare global {
       onPrepareClose: (callback: () => Promise<boolean>) => () => void
       onLauncherState: (callback: (state: LauncherState) => void) => () => void
       onNotificationState: (callback: (state: NotificationCenterState) => void) => () => void
-      onPanelView: (callback: (view: 'launcher' | 'notifications') => void) => () => void
+      onPanelView: (callback: (view: IslandPanelView) => void) => () => void
     }
   }
 }

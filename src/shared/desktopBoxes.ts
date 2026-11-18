@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const desktopBoxesActionSchema = z.enum(['show', 'hide', 'manage', 'settings', 'refresh', 'state', 'exit'])
+export const desktopBoxesActionSchema = z.enum(['show', 'hide', 'manage', 'settings', 'refresh', 'state', 'theme', 'exit'])
 export type DesktopBoxesAction = z.infer<typeof desktopBoxesActionSchema>
 
 export const desktopBoxesStateSchema = z.object({

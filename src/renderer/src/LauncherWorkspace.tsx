@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { AppWindow, ArrowRight, File, FileCode2, Folder, FolderPlus, Globe2, LayoutGrid, Plus, Search, Settings, Waves, X } from 'lucide-react'
 import { looksLikeLocalPath, type LauncherEntryView, type LauncherSearchItem, type LauncherSearchRequest, type LauncherState } from '../../shared/launcher'
+import { matchesSearchQuery } from '../../shared/pinyin'
 import { DesktopBoxesControls } from './DesktopBoxesControls'
 
 export function LaunchItemIcon({ entry }: { entry: Pick<LauncherEntryView, 'kind' | 'icon'> }) {
@@ -48,18 +49,22 @@ export function LauncherWorkspace({ state, active, onStateChange, onManage, onCr
     { id: 'manage', name: '本地启动管理', detail: '添加文件、文件夹或脚本', Icon: FolderPlus, action: onManage },
     { id: 'creator', name: '流云创作器', detail: '调整流屿桌面外观', Icon: Waves, action: onCreator },
     { id: 'settings', name: '设置', detail: '通知与通用设置', Icon: Settings, action: onSettings }
-  ].filter(item => item.name.includes(query.trim()))
+  ].filter(item => matchesSearchQuery(`${item.name} ${item.detail}`, query))
   const choiceCount = results.length + tools.length
 
   useEffect(() => {
     if (!active) { setQuery(''); setError(''); setPathConfirmed(false); return }
     searchRef.current?.focus()
-    if (!window.island) return
+    const focusFrame = window.requestAnimationFrame(() => searchRef.current?.focus())
+    if (!window.island) return () => window.cancelAnimationFrame(focusFrame)
     let live = true
     window.island.discoverInstalledApps().then(() => {
       if (live) { setScanError(''); setScanRevision(value => value + 1) }
     }).catch(() => { if (live) setScanError('应用扫描暂不可用，本地启动和固定入口仍可搜索。') })
-    return () => { live = false }
+    return () => {
+      live = false
+      window.cancelAnimationFrame(focusFrame)
+    }
   }, [active])
 
   useEffect(() => {
@@ -71,7 +76,7 @@ export function LauncherWorkspace({ state, active, onStateChange, onManage, onCr
     const timer = window.setTimeout(() => {
       const request = window.island ? window.island.searchLaunchItems(query) : Promise.resolve(
         [...localEntries.map(item => ({ ...item, source: 'local' as const, detail: item.path })), ...state.entries.map(item => ({ ...item, source: 'entry' as const, detail: '已固定' }))]
-          .filter(item => `${item.name} ${item.detail}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+          .filter(item => matchesSearchQuery(`${item.name} ${item.detail}`, query))
       )
       request.then(items => { if (live) { setResults(items); setSearching(false) } }).catch(reason => {
         if (live) { setResults([]); setSearching(false); setError(reason instanceof Error ? reason.message : '搜索失败，请重试') }
@@ -131,8 +136,9 @@ export function LauncherWorkspace({ state, active, onStateChange, onManage, onCr
   const group = (title: string, entries: LauncherEntryView[], source: LauncherSearchRequest['source'], expanded?: boolean, toggle?: () => void) => (
     <section className="launchGroup" aria-label={title}>
       <header><h2>{title}</h2>{toggle && entries.length > 8 && <button type="button" onClick={toggle}>{expanded ? '收起' : `展开 (${entries.length})`}</button>}{source === 'entry' && <button type="button" onClick={onManage}>管理 <ArrowRight size={12} /></button>}</header>
-      {entries.length ? <div className="launchIconGrid">{(expanded ? entries : entries.slice(0, 8)).map(item => (
-        <button className="launchWorkspaceTile" key={item.id} type="button" disabled={busy} title={item.name} onClick={() => void launch({ ...item, source })}>
+      {entries.length ? <div className="launchIconGrid">{(expanded ? entries : entries.slice(0, 8)).map((item, index) => (
+        <button className="launchWorkspaceTile" key={item.id} type="button" disabled={busy} title={source === 'entry' && index < 8 ? `${item.name} (Alt+${index + 1})` : item.name} onClick={() => void launch({ ...item, source })}>
+          {source === 'entry' && index < 8 && <kbd className="tileShortcutHint" aria-hidden>{index + 1}</kbd>}
           <span><LaunchItemIcon entry={item} /></span><b>{item.name}</b>
         </button>
       ))}</div> : <p className="launchGroupEmpty">{source === 'recent' ? '打开应用或本地启动项后，最近使用会显示在这里。' : '把常用入口固定在这里，最多 8 个。'}</p>}
@@ -140,6 +146,15 @@ export function LauncherWorkspace({ state, active, onStateChange, onManage, onCr
   )
 
   return <div className={`launchWorkspace ${dragging ? 'isFileDrag' : ''}`} onKeyDown={event => {
+    if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key >= '1' && event.key <= '8') {
+      const target = state.entries[Number(event.key) - 1]
+      if (target && !busy) {
+        event.preventDefault()
+        event.stopPropagation()
+        void launch({ ...target, source: 'entry' })
+      }
+      return
+    }
     if (event.key !== 'Escape') return
     event.stopPropagation()
     if (query) { setQuery(''); searchRef.current?.focus() } else onCollapse()
@@ -157,7 +172,7 @@ export function LauncherWorkspace({ state, active, onStateChange, onManage, onCr
   }}>
     <form className="launchSearchBar" onSubmit={event => { event.preventDefault(); submitChoice() }}>
       <Search size={21} aria-hidden />
-      <input ref={searchRef} value={query} maxLength={32767} placeholder="搜索应用、本地启动，或输入完整路径" aria-label="搜索应用、本地启动或路径" role="combobox" aria-expanded={Boolean(query.trim())} aria-controls="launch-search-results" aria-activedescendant={!pathQuery && query.trim() && choiceCount ? `launch-choice-${selected}` : undefined} autoComplete="off" onChange={event => { setQuery(event.target.value); setError('') }} onKeyDown={event => {
+      <input ref={searchRef} value={query} maxLength={32767} placeholder="搜索应用、拼音首字母，或输入完整路径" aria-label="搜索应用、拼音首字母或路径" role="combobox" aria-expanded={Boolean(query.trim())} aria-controls="launch-search-results" aria-activedescendant={!pathQuery && query.trim() && choiceCount ? `launch-choice-${selected}` : undefined} autoComplete="off" onChange={event => { setQuery(event.target.value); setError('') }} onKeyDown={event => {
         if (event.nativeEvent.isComposing || !['ArrowDown', 'ArrowUp'].includes(event.key) || !choiceCount || pathQuery) return
         event.preventDefault()
         setSelected(value => (value + (event.key === 'ArrowDown' ? 1 : -1) + choiceCount) % choiceCount)

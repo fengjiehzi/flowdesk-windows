@@ -215,11 +215,13 @@ public sealed partial class DesktopShellView
                     finally { owner.nativeDropRunning = false; }
                 }
                 var selected = paths.ToArray();
+                owner.categoryDropTimer?.Stop();
+                int ticks = 0;
                 var timer = owner.categoryDropTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
                 timer.Tick += async (_, _) =>
                 {
                     // OLE owns capture until the source drag ends; rebuilding earlier can destroy its view.
-                    if (GetCapture() != IntPtr.Zero) return;
+                    if (GetCapture() != IntPtr.Zero && ++ticks <= 60) return;
                     timer.Stop();
                     try { if (owner.ReclassifyDropped is not null) await owner.ReclassifyDropped(selected); }
                     catch (Exception exception) { owner.Feedback?.Invoke(exception.Message); }

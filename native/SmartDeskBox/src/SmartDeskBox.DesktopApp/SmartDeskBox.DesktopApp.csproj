@@ -4,6 +4,10 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <StartupObject>SmartDeskBox.DesktopApp.Program</StartupObject>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../SmartDeskBox.Intelligence/SmartDeskBox.Intelligence.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SmartDeskBox.Intelligence/SmartDeskBox.Intelligence.csproj" />
+  </ItemGroup>
 </Project>

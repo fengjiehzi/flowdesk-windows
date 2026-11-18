@@ -9,6 +9,7 @@ import {
   notificationSources,
   unreadNotificationCount,
   type BridgeNotification,
+  type ClipboardHistoryItem,
   type DesktopAdapterId,
   type DesktopNotificationAdapter,
   type NotificationAccessStatus,
@@ -24,6 +25,7 @@ type NotificationControllerOptions = {
   settings: () => IslandSettings
   onState: (state: NotificationCenterState) => void
   onNotification: () => void
+  onLog?: (message: string) => void
 }
 
 export class NotificationController {
@@ -42,6 +44,8 @@ export class NotificationController {
   private shuttingDown = false
   private clipboardArchiveError: string | null = null
   private clipboardArchiveActive = false
+  private clipboardItems: ClipboardHistoryItem[] = []
+  private suppressedClipboardPreview: string | null = null
 
   constructor(private readonly options: NotificationControllerOptions) {}
 
@@ -60,6 +64,7 @@ export class NotificationController {
       desktopAdapters: [...this.desktopAdapters.values()],
       clipboardArchiveError: this.clipboardArchiveError,
       clipboardArchiveActive: settings.clipboardArchiveEnabled && this.clipboardArchiveActive,
+      clipboardItems: this.clipboardItems,
       bridgeStatus: this.process ? 'running' : this.accessStatus === 'unavailable' ? 'unavailable' : 'stopped'
     }
   }
@@ -113,6 +118,19 @@ export class NotificationController {
     this.emitState()
   }
 
+  getClipboardItem(id: string) {
+    return this.clipboardItems.find(item => item.id === id) ?? null
+  }
+
+  suppressNextClipboardEcho(preview: string) {
+    this.suppressedClipboardPreview = preview
+  }
+
+  clearClipboardItems() {
+    this.clipboardItems = []
+    this.emitState()
+  }
+
   async shutdown(onTimeout: () => Promise<'wait' | 'cancel' | 'force'> = async () => 'cancel') {
     this.shuttingDown = true
     const child = this.process
@@ -159,7 +177,11 @@ export class NotificationController {
       stdio: ['pipe', 'pipe', 'pipe']
     })
     this.process = child
-    child.stderr.resume()
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      const text = chunk.trim()
+      if (text) this.options.onLog?.(text)
+    })
     child.stdin.on('error', () => {})
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => this.consume(chunk))
@@ -231,8 +253,12 @@ export class NotificationController {
       if (!line) continue
       try {
         const event = bridgeEventSchema.parse(JSON.parse(line))
-        if (event.type === 'ready') continue
+        if (event.type === 'ready') {
+          this.restartAvailable = true
+          continue
+        }
         if (event.type === 'status') {
+          this.restartAvailable = true
           const regainedAccess = this.accessStatus !== 'allowed' && event.status === 'allowed'
           this.accessStatus = event.status
           if (regainedAccess) this.snapshotKeys = null
@@ -246,6 +272,16 @@ export class NotificationController {
         }
         if (event.type === 'clipboardArchiveSaved') {
           this.clipboardArchiveError = null
+          if (event.item) {
+            if (this.suppressedClipboardPreview && event.item.preview === this.suppressedClipboardPreview) {
+              this.suppressedClipboardPreview = null
+            } else {
+              this.clipboardItems = [
+                event.item,
+                ...this.clipboardItems.filter(existing => existing.id !== event.item!.id && !(event.item!.kind === 'text' && existing.kind === 'text' && existing.text === event.item!.text))
+              ].slice(0, 50)
+            }
+          }
         }
         if (event.type === 'clipboardArchiveStatus') this.clipboardArchiveActive = event.enabled
         if (event.type === 'error') this.accessStatus = 'error'

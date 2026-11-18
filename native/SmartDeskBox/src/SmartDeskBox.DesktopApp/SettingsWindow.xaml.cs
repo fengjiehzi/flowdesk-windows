@@ -48,10 +48,12 @@ public partial class SettingsWindow : Window
                 HideEmpty = HideEmptyBox.IsChecked == true, AutoRefresh = AutoRefreshBox.IsChecked == true
             };
             appearance.Validate();
-            settings.Validate();
+            if (settings.Enabled) settings.Validate();
             var path = Path.Combine(paths.Root, "appsettings.local.json");
-            WorkspacePaths.EnsureNoReparsePoints(path);
-            WorkspacePaths.EnsureNoReparsePoints(path + ".tmp");
+            WorkspacePaths.EnsureNoReparsePoints(path, paths.Root);
+            WorkspacePaths.EnsureNoReparsePoints(path + ".tmp", paths.Root);
+            if (!string.Equals(Settings.BaseUrl.TrimEnd('/'), settings.BaseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+                CredentialVault.Write(paths, Settings.BaseUrl, "");
             CredentialVault.Write(paths, settings.BaseUrl, settings.LlmApiKey);
             File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(settings with { LlmApiKey = "" }, new JsonSerializerOptions { WriteIndented = true }));
             File.Move(path + ".tmp", path, true);

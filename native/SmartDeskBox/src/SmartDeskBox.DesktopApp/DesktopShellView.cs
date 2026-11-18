@@ -167,7 +167,11 @@ public sealed partial class DesktopShellView : HwndHost
     {
         if (view?.TranslateAccelerator(ref message) == 0) return true;
         if (message.message == 0x100 && message.wParam == new IntPtr(0x4e) && modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
-        { InvokeNativeCommand("NewFolder", true); return true; }
+        {
+            try { InvokeNativeCommand("NewFolder", true); }
+            catch (COMException ex) { Feedback?.Invoke("新建文件夹失败：" + ex.Message); }
+            return true;
+        }
         return false;
     }
 
@@ -211,6 +215,7 @@ public sealed partial class DesktopShellView : HwndHost
         SendMessage(list, 0x1001, IntPtr.Zero, InterfaceTheme.NativeColor("Surface"));
         SendMessage(list, 0x1024, IntPtr.Zero, InterfaceTheme.NativeColor("Text"));
         SendMessage(list, 0x1026, IntPtr.Zero, new IntPtr(-1));
+        DesktopNative.InvalidateRect(list, IntPtr.Zero, true);
     }
 
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]

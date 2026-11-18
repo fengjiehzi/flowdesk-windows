@@ -1,20 +1,21 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
 import { spawn } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import Store from 'electron-store'
+import electronLog from 'electron-log/main'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isSurfaceActive, pointInRectangle, surfaceWindowMode, type IslandSurface } from '../shared/islandPresentation'
 import { nextIslandState, type IslandEvent, type IslandState } from '../shared/islandState'
-import { nextTopEdgeHover, topEdgeBounds, type TopEdgeHover } from '../shared/edgeActivation'
+import { topEdgeBounds } from '../shared/edgeActivation'
 import { applySettingsPatch, defaultSettings, recoverSettings, settingsSchema, themes, type IslandSettings } from '../shared/settings'
 import type { LauncherState, WebsiteShortcutInput } from '../shared/launcher'
 import { nextNotificationPreviewDeadline, type NotificationCenterState } from '../shared/notifications'
-import type { IslandSnapshot } from '../shared/types'
+import type { IslandPanelView, IslandSnapshot } from '../shared/types'
 import { createLauncherStore, LauncherController } from './launcher'
 import { NotificationController } from './notifications'
-import { loadRecoverableConfig } from './configRecovery'
+import { createSafeStore, loadRecoverableConfig } from './configRecovery'
 import { isTrustedRendererUrl } from './rendererSecurity'
 import { DesktopBoxesController } from './desktopBoxes'
 import type { DesktopBoxesAction, DesktopBoxesState } from '../shared/desktopBoxes'
@@ -30,15 +31,14 @@ app.setPath('userData', legacyUserDataPath)
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const preloadPath = path.join(currentDir, '../preload/index.cjs')
 const iconPath = path.join(currentDir, '../../resources/app-icon.ico')
-const surfaces: IslandSurface[] = ['compact', 'panel']
+const surfaces: IslandSurface[] = ['compact']
 type SurfaceDimensions = { width: number; height: number; inset: number; contentWidth: number; contentHeight: number }
 const fixedSurfaceWindows = {
   compact: { width: 164, height: 56, inset: 8, contentWidth: 148, contentHeight: 40 },
   notification: { width: 454, height: 92, inset: 12, contentWidth: 430, contentHeight: 68 },
   panel: { width: 808, height: 488, inset: 12, contentWidth: 784, contentHeight: 464 }
 } as const
-const globalShortcutAccelerator = 'Ctrl+Alt+Space'
-const transitionMs = 180
+const transitionMs = 260
 const visibleTopOffset = 12
 const logPrefix = '[流屿桌面]'
 const themeLabels: Record<IslandSettings['theme'], string> = {
@@ -51,7 +51,18 @@ const themeLabels: Record<IslandSettings['theme'], string> = {
   slate: '岩灰',
   rose: '玫瑰'
 }
+const themeAccents: Record<IslandSettings['theme'], string> = {
+  graphite: '#52d273',
+  aurora: '#59d6a2',
+  ember: '#e58a5b',
+  cobalt: '#5ca7ed',
+  plum: '#bd82c9',
+  citrus: '#b6d45f',
+  slate: '#7fa6c9',
+  rose: '#dd7899'
+}
 const windows: Record<IslandSurface, BrowserWindow | null> = { compact: null, panel: null }
+let edgeWindow: BrowserWindow | null = null
 let creatorWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let launcherWindow: BrowserWindow | null = null
@@ -62,13 +73,14 @@ let desktopBoxesController: DesktopBoxesController | null = null
 let state: IslandState = 'HIDDEN'
 let activeDisplayId: number | null = null
 let surfaceTimer: NodeJS.Timeout | null = null
+let morphBoundsTimer: NodeJS.Timeout | null = null
+let morphHoldPanelBounds = false
 let cursorTimer: NodeJS.Timeout | null = null
 let clockTimer: NodeJS.Timeout | null = null
 let settingsStore: Store<IslandSettings> | null = null
 let surfaceOutsideSince: number | null = null
 let pointerEnteredIsland = false
-let topEdgeHover: TopEdgeHover | null = null
-let panelView: 'launcher' | 'notifications' = 'launcher'
+let panelView: IslandPanelView = 'launcher'
 let notificationTimer: NodeJS.Timeout | null = null
 let notificationStartedAt = 0
 let notificationDeadline = 0
@@ -88,10 +100,12 @@ let closeRequestId = 0
 
 function cleanupTimers() {
   if (surfaceTimer) clearTimeout(surfaceTimer)
+  if (morphBoundsTimer) clearTimeout(morphBoundsTimer)
   if (cursorTimer) clearTimeout(cursorTimer)
-  if (clockTimer) clearInterval(clockTimer)
+  if (clockTimer) clearTimeout(clockTimer)
   if (notificationTimer) clearTimeout(notificationTimer)
   surfaceTimer = null
+  morphBoundsTimer = null
   cursorTimer = null
   clockTimer = null
   notificationTimer = null
@@ -100,9 +114,9 @@ function cleanupTimers() {
 function log(message: string, level: 'info' | 'warn' | 'error' = 'info') {
   const timestamp = new Date().toISOString()
   const prefix = `${logPrefix}[${timestamp}]`
-  if (level === 'error') console.error(prefix, message)
-  else if (level === 'warn') console.warn(prefix, message)
-  else console.log(prefix, message)
+  if (level === 'error') electronLog.error(prefix, message)
+  else if (level === 'warn') electronLog.warn(prefix, message)
+  else electronLog.info(prefix, message)
 }
 
 function clipboardArchivePath() {
@@ -115,13 +129,13 @@ function validWindow(surface: IslandSurface) {
 }
 
 function surfaceDimensions(surface: IslandSurface): SurfaceDimensions {
-  if (surface === 'compact' && notificationVisible) return fixedSurfaceWindows.notification
-  if (surface === 'panel') {
+  if (surface === 'panel' || (typeof surfaces !== 'undefined' && surfaces.length === 1 && (state === 'EXPANDED' || morphHoldPanelBounds) && !notificationVisible)) {
     const area = (screen.getAllDisplays().find(display => display.id === activeDisplayId) ?? screen.getPrimaryDisplay()).workArea
     const width = Math.min(fixedSurfaceWindows.panel.width, area.width)
     const height = Math.min(fixedSurfaceWindows.panel.height, area.height - visibleTopOffset)
     return { ...fixedSurfaceWindows.panel, width, height, contentWidth: width - 24, contentHeight: height - 24 }
   }
+  if (surface === 'compact' && notificationVisible) return fixedSurfaceWindows.notification
   return fixedSurfaceWindows[surface]
 }
 
@@ -131,7 +145,9 @@ function snapshot(): IslandSnapshot {
     compactMode: notificationVisible ? 'notification' : 'clock',
     settings,
     now: new Date().toISOString(),
-    settingsRevision
+    settingsRevision,
+    shortcutRegistered,
+    panelView
   }
 }
 
@@ -186,6 +202,27 @@ function contentPosition(surface: IslandSurface) {
   return { x, y: workArea.y + visibleTopOffset }
 }
 
+function positionEdgeWindow() {
+  if (!edgeWindow || edgeWindow.isDestroyed()) return
+  const display = targetDisplay()
+  const bounds = topEdgeBounds(display, settings.position)
+  edgeWindow.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: 2 })
+}
+
+function syncEdgeWindowVisibility() {
+  if (!edgeWindow || edgeWindow.isDestroyed()) return
+  const secondaryVisible = Boolean(creatorWindow?.isVisible() || settingsWindow?.isVisible() || launcherWindow?.isVisible())
+  const fullscreenActive = notificationController?.getState().suppression === 'fullscreen'
+  const shouldShow = state === 'HIDDEN' && !notificationVisible && !quitStarted && !secondaryVisible && !fullscreenActive
+  if (shouldShow) {
+    positionEdgeWindow()
+    if (!edgeWindow.isVisible()) edgeWindow.showInactive()
+    edgeWindow.moveTop()
+  } else if (edgeWindow.isVisible()) {
+    edgeWindow.hide()
+  }
+}
+
 function positionWindows() {
   for (const surface of surfaces) {
     const window = validWindow(surface)
@@ -199,6 +236,7 @@ function positionWindows() {
       height: dimensions.height
     })
   }
+  if (typeof positionEdgeWindow === 'function') positionEdgeWindow()
 }
 
 function syncSurfaceWindows() {
@@ -209,7 +247,9 @@ function syncSurfaceWindows() {
   for (const surface of surfaces) {
     const window = validWindow(surface)
     if (!window) continue
-    const mode = surfaceWindowMode(surface, state, notificationVisible)
+    const mode = surfaces.length === 1
+      ? (state === 'HIDDEN' && !notificationVisible ? 'hidden' : 'active')
+      : surfaceWindowMode(surface, state, notificationVisible)
     if (mode !== 'hidden') {
       if (!window.isVisible()) window.showInactive()
       window.setFocusable(mode === 'active' && !notificationVisible)
@@ -222,21 +262,27 @@ function syncSurfaceWindows() {
   }
 
   broadcastSnapshot()
+  if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
+  if (typeof ensureLeavePolling === 'function') ensureLeavePolling()
   if (surfaceTimer) clearTimeout(surfaceTimer)
   surfaceTimer = setTimeout(() => {
     if (syncSequence !== currentSequence) return
     for (const surface of surfaces) {
       const window = validWindow(surface)
       if (!window) continue
-      const mode = surfaceWindowMode(surface, state, notificationVisible)
+      const mode = surfaces.length === 1
+        ? (state === 'HIDDEN' && !notificationVisible ? 'hidden' : 'active')
+        : surfaceWindowMode(surface, state, notificationVisible)
       if (mode !== 'hidden') {
         if (!window.isVisible()) window.showInactive()
         window.setFocusable(mode === 'active' && !notificationVisible)
         window.setIgnoreMouseEvents(mode !== 'active')
+        window.webContents?.setBackgroundThrottling?.(false)
       } else {
         window.setIgnoreMouseEvents(true)
         window.setFocusable(false)
         window.hide()
+        window.webContents?.setBackgroundThrottling?.(true)
       }
     }
     surfaceTimer = null
@@ -305,7 +351,7 @@ function setNotificationHovered(hovered: boolean) {
 function rebuildTrayMenu() {
   if (!tray) return
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: shortcutRegistered ? `显示流屿桌面 (${globalShortcutAccelerator})` : '显示流屿桌面（快捷键不可用）', click: revealCompactOnCursorDisplay },
+    { label: shortcutRegistered ? `显示流屿桌面 (${settings.shortcutAccelerator})` : '显示流屿桌面（快捷键冲突不可用）', click: triggerGlobalShortcut },
     { label: '隐藏流屿桌面', click: hideIsland },
     { label: '设置', click: () => void openSettingsWindow() },
     { label: '桌面整理', submenu: [
@@ -347,6 +393,20 @@ async function runDesktopBoxesAction(action: DesktopBoxesAction) {
 function setState(next: IslandState) {
   if (state === next) return
   const previous = state
+  if (morphBoundsTimer) {
+    clearTimeout(morphBoundsTimer)
+    morphBoundsTimer = null
+  }
+  if (previous === 'EXPANDED' && next === 'COMPACT') {
+    morphHoldPanelBounds = true
+    morphBoundsTimer = setTimeout(() => {
+      morphHoldPanelBounds = false
+      morphBoundsTimer = null
+      positionWindows()
+    }, transitionMs)
+  } else {
+    morphHoldPanelBounds = false
+  }
   state = next
   syncSequence++
   if (next === 'HIDDEN') {
@@ -362,10 +422,15 @@ function transition(event: IslandEvent) {
   setState(nextIslandState(state, event))
 }
 
+function activeIslandWindow() {
+  return surfaces.length === 1 ? validWindow('compact') : validWindow('panel')
+}
+
 function setExpanded(expanded: boolean) {
   if (expanded) {
     surfaceOutsideSince = null
     setState('EXPANDED')
+    activeIslandWindow()?.focus()
     return
   }
   if (state !== 'HIDDEN') revealCompact()
@@ -384,37 +449,43 @@ function hideIsland() {
   transition('HIDE')
 }
 
-function pollCursor() {
+function ensureLeavePolling() {
+  if (state !== 'HIDDEN' && !notificationVisible) {
+    if (!cursorTimer) cursorTimer = setTimeout(pollLeaveCursor, 120)
+  } else if (cursorTimer) {
+    clearTimeout(cursorTimer)
+    cursorTimer = null
+  }
+}
+
+// 仅在胶囊或面板处于可见态时检测鼠标离开自动收起；隐藏待机态零轮询。
+function pollLeaveCursor() {
+  cursorTimer = null
+  if (state === 'HIDDEN' || notificationVisible) return
   if (!surfaces.some((surface) => validWindow(surface))) return
 
   const now = Date.now()
   const point = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(point)
   const insideEdge = pointInRectangle(point, topEdgeBounds(display, settings.position))
-  const edge = nextTopEdgeHover(topEdgeHover, insideEdge ? display.id : null, now)
-  topEdgeHover = edge.hover
-  if (edge.activate && state === 'HIDDEN' && !notificationVisible && !quitStarted) {
-    activeDisplayId = display.id
-    revealCompact()
-  }
+  const insideIsland = surfaces.some((surface) => {
+    if (surfaces.length > 1 && !isSurfaceActive(surface, state)) return false
+    const window = validWindow(surface)
+    return Boolean(window && pointInRectangle(point, window.getBounds()))
+  })
 
-  if (state !== 'HIDDEN' && !notificationVisible) {
-    const insideIsland = surfaces.some((surface) => {
-      if (!isSurfaceActive(surface, state)) return false
-      const window = validWindow(surface)
-      return Boolean(window && pointInRectangle(point, window.getBounds()))
-    })
-
-    if (insideIsland || (insideEdge && display.id === activeDisplayId)) {
-      pointerEnteredIsland = true
-      surfaceOutsideSince = null
-    } else if (pointerEnteredIsland) {
-      surfaceOutsideSince ??= now
-      if (now - surfaceOutsideSince >= settings.hideDelayMs) hideIsland()
+  if (insideIsland || (insideEdge && display.id === activeDisplayId)) {
+    pointerEnteredIsland = true
+    surfaceOutsideSince = null
+  } else if (pointerEnteredIsland) {
+    surfaceOutsideSince ??= now
+    if (now - surfaceOutsideSince >= settings.hideDelayMs) {
+      hideIsland()
+      return
     }
   }
 
-  cursorTimer = setTimeout(pollCursor, 120)
+  cursorTimer = setTimeout(pollLeaveCursor, 120)
 }
 
 function revealCompactOnCursorDisplay() {
@@ -425,10 +496,28 @@ function revealCompactOnCursorDisplay() {
   validWindow('compact')?.focus()
 }
 
+function triggerGlobalShortcut() {
+  if (state === 'EXPANDED') {
+    hideIsland()
+    return
+  }
+  activeDisplayId = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id
+  if (settings.hotkeyDirectExpand) {
+    openPanel('launcher')
+  } else {
+    revealCompactOnCursorDisplay()
+  }
+}
+
 function registerGlobalShortcut() {
-  shortcutRegistered = globalShortcut.register(globalShortcutAccelerator, revealCompactOnCursorDisplay)
-  if (!shortcutRegistered) log(`无法注册全局快捷键: ${globalShortcutAccelerator}`, 'warn')
-  else log(`全局快捷键已注册: ${globalShortcutAccelerator}`)
+  globalShortcut.unregisterAll()
+  try {
+    shortcutRegistered = globalShortcut.register(settings.shortcutAccelerator, triggerGlobalShortcut)
+  } catch {
+    shortcutRegistered = false
+  }
+  if (!shortcutRegistered) log(`无法注册全局快捷键: ${settings.shortcutAccelerator}`, 'warn')
+  else log(`全局快捷键已注册: ${settings.shortcutAccelerator}`)
 }
 
 function loadSettings(store: Store<IslandSettings>) {
@@ -448,8 +537,17 @@ function updateSettings(store: Store<IslandSettings>, patch: unknown) {
     app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
     log(`开机自启: ${settings.launchAtLogin ? '已启用' : '已禁用'}`)
   }
+  if (settings.shortcutAccelerator !== previousSettings.shortcutAccelerator) {
+    if (typeof registerGlobalShortcut === 'function') registerGlobalShortcut()
+    if (typeof rebuildTrayMenu === 'function') rebuildTrayMenu()
+  }
   if (settings.position !== previousSettings.position) positionWindows()
-  if (settings.theme !== previousSettings.theme) rebuildTrayMenu()
+  if (settings.theme !== previousSettings.theme) {
+    if (typeof rebuildTrayMenu === 'function') rebuildTrayMenu()
+    if (typeof desktopBoxesController !== 'undefined' && typeof themeAccents !== 'undefined') {
+      void desktopBoxesController?.syncTheme(themeAccents[settings.theme])
+    }
+  }
   if (
     settings.notificationsEnabled !== previousSettings.notificationsEnabled
     || settings.desktopPopupNotificationsEnabled !== previousSettings.desktopPopupNotificationsEnabled
@@ -464,13 +562,13 @@ function updateSettings(store: Store<IslandSettings>, patch: unknown) {
   return settings
 }
 
-function openPanel(view: 'launcher' | 'notifications' = 'launcher') {
+function openPanel(view: IslandPanelView = 'launcher') {
   hideNotificationPreview()
   panelView = view
   surfaceOutsideSince = null
   setExpanded(true)
-  const panel = validWindow('panel')
-  if (panel && !panel.webContents.isDestroyed()) panel.webContents.send('island:panelView', panelView)
+  const target = activeIslandWindow()
+  if (target && !target.webContents.isDestroyed()) target.webContents.send('island:panelView', panelView)
   if (view === 'notifications') notificationController?.markRead()
 }
 
@@ -517,7 +615,7 @@ function secureWindow(window: BrowserWindow) {
 function trustedSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) {
   const frame = event.senderFrame
   if (!frame) return false
-  const known = [...Object.values(windows), creatorWindow, settingsWindow, launcherWindow]
+  const known = [...Object.values(windows), edgeWindow, creatorWindow, settingsWindow, launcherWindow]
     .some((window) => window && !window.isDestroyed() && window.webContents === event.sender)
   return known && frame === event.sender.mainFrame && isTrustedRendererUrl(
     frame.url, path.join(currentDir, '../renderer/index.html'), process.env.ELECTRON_RENDERER_URL
@@ -583,6 +681,30 @@ function registerIpc(store: Store<IslandSettings>) {
     const error = await shell.openPath(directory)
     if (error) throw new Error(error)
   })
+  handle('clipboardArchive:copyItem', (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id) return false
+    const item = notificationController?.getClipboardItem(id)
+    if (!item) return false
+    if (item.kind === 'text' && item.text !== undefined) {
+      notificationController?.suppressNextClipboardEcho(item.preview)
+      clipboard.writeText(item.text)
+      hideIsland()
+      return true
+    }
+    if (item.kind === 'image' && item.filePath && existsSync(item.filePath)) {
+      notificationController?.suppressNextClipboardEcho(item.preview)
+      clipboard.writeImage(nativeImage.createFromPath(item.filePath))
+      hideIsland()
+      return true
+    }
+    if (item.filePath && existsSync(item.filePath)) {
+      shell.showItemInFolder(item.filePath)
+      hideIsland()
+      return true
+    }
+    return false
+  })
+  handle('clipboardArchive:clearItems', () => notificationController?.clearClipboardItems())
   handle('notifications:openSource', (_event, appId: unknown) => {
     if (typeof appId !== 'string' || !appId.trim() || appId.length > 512) return
     if (notificationController?.openSource(appId)) return
@@ -590,7 +712,17 @@ function registerIpc(store: Store<IslandSettings>) {
     child.unref()
   })
   on('notifications:openPanel', (_event, view: unknown) => {
-    openPanel(view === 'notifications' ? 'notifications' : 'launcher')
+    openPanel(view === 'notifications' ? 'notifications' : view === 'clipboard' ? 'clipboard' : 'launcher')
+  })
+  on('island:edgeTrigger', () => {
+    if (state !== 'HIDDEN' || notificationVisible || quitStarted) return
+    const secondaryVisible = Boolean(creatorWindow?.isVisible() || settingsWindow?.isVisible() || launcherWindow?.isVisible())
+    const fullscreenActive = notificationController?.getState().suppression === 'fullscreen'
+    if (secondaryVisible || fullscreenActive) return
+    activeDisplayId = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id
+    pointerEnteredIsland = true
+    surfaceOutsideSince = null
+    revealCompact()
   })
   on('notifications:hovered', (_event, hovered: boolean) => setNotificationHovered(Boolean(hovered)))
   on('launcher:openManager', () => void openLauncherWindow())
@@ -605,17 +737,40 @@ function registerIpc(store: Store<IslandSettings>) {
   })
 }
 
-function rendererUrl(surface: IslandSurface | 'creator' | 'settings' | 'launcher') {
+function rendererUrl(surface: IslandSurface | 'island' | 'edge' | 'creator' | 'settings' | 'launcher') {
   const url = new URL(process.env.ELECTRON_RENDERER_URL as string)
   url.searchParams.set('surface', surface)
   return url.toString()
 }
 
+// Win11 多虚拟桌面与多显示器感知：将普通管理窗口居中于鼠标所在屏幕并拉取到当前活跃虚拟桌面。
+function placeWindowOnActiveWorkspace(window: BrowserWindow, width?: number, height?: number) {
+  if (typeof screen === 'undefined') return
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  const bounds = window.getBounds?.() ?? { width: width ?? 800, height: height ?? 600 }
+  const w = Math.min(width ?? bounds.width, area.width)
+  const h = Math.min(height ?? bounds.height, area.height)
+  window.setBounds?.({
+    x: Math.round(area.x + (area.width - w) / 2),
+    y: Math.round(area.y + (area.height - h) / 2),
+    width: w,
+    height: h
+  })
+  window.setVisibleOnAllWorkspaces?.(true)
+  if (!window.isVisible()) window.show()
+  window.setVisibleOnAllWorkspaces?.(false)
+  window.moveTop?.()
+  window.focus()
+}
+
 async function openLauncherWindow() {
   hideIsland()
   if (launcherWindow && !launcherWindow.isDestroyed()) {
-    if (!launcherWindow.isVisible()) launcherWindow.show()
-    launcherWindow.focus()
+    if (typeof placeWindowOnActiveWorkspace === 'function') placeWindowOnActiveWorkspace(launcherWindow)
+    else {
+      if (!launcherWindow.isVisible()) launcherWindow.show()
+      launcherWindow.focus()
+    }
     return
   }
 
@@ -629,12 +784,17 @@ async function openLauncherWindow() {
     resizable: true,
     autoHideMenuBar: true,
     backgroundColor: '#07101b',
+    ...(process.platform === 'win32' ? {
+      backgroundMaterial: 'mica' as const,
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#00000000', symbolColor: '#f3f5f7', height: 34 }
+    } : {}),
     icon: nativeImage.createFromPath(iconPath),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })
@@ -644,9 +804,14 @@ async function openLauncherWindow() {
   window.on('close', () => launcherController?.completeSetup())
   window.on('closed', () => {
     if (launcherWindow === window) launcherWindow = null
+    if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
   })
   window.once('ready-to-show', () => {
-    if (!window.isDestroyed()) window.show()
+    if (!window.isDestroyed()) {
+      if (typeof placeWindowOnActiveWorkspace === 'function') placeWindowOnActiveWorkspace(window, 880, 640)
+      else window.show()
+      if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
+    }
   })
   window.webContents.on('did-finish-load', () => {
     if (window.webContents.isDestroyed()) return
@@ -678,8 +843,11 @@ function bindCreatorWindowInteraction(window: BrowserWindow) {
 async function openCreatorWindow() {
   hideIsland()
   if (creatorWindow && !creatorWindow.isDestroyed()) {
-    if (!creatorWindow.isVisible()) creatorWindow.show()
-    creatorWindow.focus()
+    if (typeof placeWindowOnActiveWorkspace === 'function') placeWindowOnActiveWorkspace(creatorWindow)
+    else {
+      if (!creatorWindow.isVisible()) creatorWindow.show()
+      creatorWindow.focus()
+    }
     return
   }
 
@@ -693,12 +861,17 @@ async function openCreatorWindow() {
     resizable: true,
     autoHideMenuBar: true,
     backgroundColor: '#07101b',
+    ...(process.platform === 'win32' ? {
+      backgroundMaterial: 'mica' as const,
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#00000000', symbolColor: '#f3f5f7', height: 34 }
+    } : {}),
     icon: nativeImage.createFromPath(iconPath),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })
@@ -709,9 +882,14 @@ async function openCreatorWindow() {
   protectWindowClose(window)
   window.on('closed', () => {
     if (creatorWindow === window) creatorWindow = null
+    if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
   })
   window.once('ready-to-show', () => {
-    if (!window.isDestroyed()) window.show()
+    if (!window.isDestroyed()) {
+      if (typeof placeWindowOnActiveWorkspace === 'function') placeWindowOnActiveWorkspace(window, 980, 680)
+      else window.show()
+      if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
+    }
   })
   window.webContents.on('did-finish-load', () => {
     if (!window.webContents.isDestroyed()) window.webContents.send('island:snapshot', snapshot())
@@ -724,8 +902,11 @@ async function openCreatorWindow() {
 async function openSettingsWindow() {
   hideIsland()
   if (settingsWindow && !settingsWindow.isDestroyed()) {
-    if (!settingsWindow.isVisible()) settingsWindow.show()
-    settingsWindow.focus()
+    if (typeof placeWindowOnActiveWorkspace === 'function') placeWindowOnActiveWorkspace(settingsWindow)
+    else {
+      if (!settingsWindow.isVisible()) settingsWindow.show()
+      settingsWindow.focus()
+    }
     return
   }
 
@@ -739,12 +920,17 @@ async function openSettingsWindow() {
     resizable: true,
     autoHideMenuBar: true,
     backgroundColor: '#07101b',
+    ...(process.platform === 'win32' ? {
+      backgroundMaterial: 'mica' as const,
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#00000000', symbolColor: '#f3f5f7', height: 34 }
+    } : {}),
     icon: nativeImage.createFromPath(iconPath),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })
@@ -754,9 +940,14 @@ async function openSettingsWindow() {
   protectWindowClose(window)
   window.on('closed', () => {
     if (settingsWindow === window) settingsWindow = null
+    if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
   })
   window.once('ready-to-show', () => {
-    if (!window.isDestroyed()) window.show()
+    if (!window.isDestroyed()) {
+      if (typeof placeWindowOnActiveWorkspace === 'function') placeWindowOnActiveWorkspace(window, 560, 720)
+      else window.show()
+      if (typeof syncEdgeWindowVisibility === 'function') syncEdgeWindowVisibility()
+    }
   })
   window.webContents.on('did-finish-load', () => {
     if (window.webContents.isDestroyed()) return
@@ -782,13 +973,14 @@ async function createSurfaceWindow(surface: IslandSurface) {
     hasShadow: false,
     alwaysOnTop: true,
     focusable: true,
+    roundedCorners: false,
     backgroundColor: '#00000000',
     icon: nativeImage.createFromPath(iconPath),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })
@@ -810,6 +1002,42 @@ async function createSurfaceWindow(surface: IslandSurface) {
   else await window.loadFile(path.join(currentDir, '../renderer/index.html'), { query: { surface } })
 }
 
+async function createEdgeWindow() {
+  const bounds = topEdgeBounds(targetDisplay(), settings.position)
+  const window = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: 2,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+    show: false,
+    hasShadow: false,
+    alwaysOnTop: true,
+    focusable: false,
+    roundedCorners: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false
+    }
+  })
+  edgeWindow = window
+  secureWindow(window)
+  window.setAlwaysOnTop(true, 'screen-saver')
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  window.on('closed', () => {
+    if (edgeWindow === window) edgeWindow = null
+  })
+  if (process.env.ELECTRON_RENDERER_URL) await window.loadURL(rendererUrl('edge'))
+  else await window.loadFile(path.join(currentDir, '../renderer/index.html'), { query: { surface: 'edge' } })
+}
+
 function createTray() {
   tray = new Tray(nativeImage.createFromPath(iconPath))
   tray.setToolTip('流屿桌面 · 点击胶囊展开')
@@ -825,30 +1053,64 @@ if (!gotLock) {
   app.on('second-instance', revealCompactOnCursorDisplay)
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.desktop.dynamicisland')
-    settingsStore = new Store<IslandSettings>({ name: 'settings', defaults: defaultSettings })
-    launcherController = new LauncherController(createLauncherStore(), broadcastLauncherState)
+    settingsStore = createSafeStore(
+      path.join(legacyUserDataPath, 'settings.json'),
+      () => new Store<IslandSettings>({ name: 'settings', defaults: defaultSettings }),
+      recoveryBackups
+    )
+    const bridgeBinaryPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'native', 'NotificationBridge.exe')
+      : path.join(currentDir, '../../build/generated/native/NotificationBridge.exe')
+    const sharedDesktopBoxesPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'native', 'SmartDeskBox.DesktopApp.exe')
+      : path.join(currentDir, '../../build/generated/native/SmartDeskBox.DesktopApp.exe')
+    const legacyDevDesktopBoxesPath = path.join(currentDir, '../../build/generated/desktop-boxes/SmartDeskBox.DesktopApp.exe')
+    const desktopBoxesBinaryPath = !app.isPackaged && !existsSync(sharedDesktopBoxesPath) && existsSync(legacyDevDesktopBoxesPath)
+      ? legacyDevDesktopBoxesPath
+      : sharedDesktopBoxesPath
+
+    const launcherStore = createSafeStore(
+      path.join(legacyUserDataPath, 'launcher.json'),
+      () => createLauncherStore(),
+      recoveryBackups
+    )
+    launcherController = new LauncherController(
+      launcherStore,
+      broadcastLauncherState,
+      path.join(legacyUserDataPath, 'installed-apps-cache.json'),
+      bridgeBinaryPath
+    )
     loadSettings(settingsStore)
-    const desktopBoxesStore = new Store<{ enabled: boolean }>({ name: 'desktop-boxes', defaults: { enabled: false } })
+    const desktopBoxesStore = createSafeStore(
+      path.join(legacyUserDataPath, 'desktop-boxes.json'),
+      () => new Store<{ enabled: boolean }>({ name: 'desktop-boxes', defaults: { enabled: false } }),
+      recoveryBackups
+    )
     desktopBoxesController = new DesktopBoxesController({
-      executablePath: app.isPackaged
-        ? path.join(process.resourcesPath, 'desktop-boxes', 'SmartDeskBox.DesktopApp.exe')
-        : path.join(currentDir, '../../build/generated/desktop-boxes/SmartDeskBox.DesktopApp.exe'),
+      executablePath: desktopBoxesBinaryPath,
       dataPath: path.join(app.getPath('userData'), 'desktop-boxes'),
       enabled: desktopBoxesStore.get('enabled') === true,
+      accent: themeAccents[settings.theme],
       onEnabledChange: enabled => desktopBoxesStore.set('enabled', enabled),
-      onState: broadcastDesktopBoxesState
+      onState: broadcastDesktopBoxesState,
+      onLog: message => log(`桌面整理日志: ${message}`, 'warn')
     })
     notificationController = new NotificationController({
-      bridgePath: app.isPackaged
-        ? path.join(process.resourcesPath, 'native', 'NotificationBridge.exe')
-        : path.join(currentDir, '../../build/generated/native/NotificationBridge.exe'),
+      bridgePath: bridgeBinaryPath,
       clipboardArchivePath,
       settings: () => settings,
-      onState: broadcastNotificationState,
-      onNotification: showNotificationPreview
+      onState: value => {
+        broadcastNotificationState(value)
+        syncEdgeWindowVisibility()
+      },
+      onNotification: showNotificationPreview,
+      onLog: message => log(`通知桥接日志: ${message}`, 'warn')
     })
     registerIpc(settingsStore)
-    await Promise.all(surfaces.map(createSurfaceWindow))
+    await Promise.all([...surfaces.map(createSurfaceWindow), createEdgeWindow()])
+    activeIslandWindow()?.on('blur', () => {
+      if (state === 'EXPANDED' && !quitStarted && !notificationVisible) hideIsland()
+    })
     syncSurfaceWindows()
     notificationController.configure()
     registerGlobalShortcut()
@@ -865,8 +1127,17 @@ if (!gotLock) {
       })
     }
     if (!launcherController.getState().setupCompleted) await openLauncherWindow()
-    clockTimer = setInterval(() => broadcastSnapshot(false), 1000)
-    pollCursor()
+    const scheduleClockTick = () => {
+      const delay = 60_000 - (Date.now() % 60_000) + 50
+      clockTimer = setTimeout(() => {
+        const visible = state !== 'HIDDEN' || notificationVisible || [creatorWindow, settingsWindow, launcherWindow].some(
+          window => window && !window.isDestroyed() && window.isVisible()
+        )
+        if (visible) broadcastSnapshot(false)
+        scheduleClockTick()
+      }, delay)
+    }
+    scheduleClockTick()
     screen.on('display-added', positionWindows)
     screen.on('display-removed', positionWindows)
     screen.on('display-metrics-changed', positionWindows)
@@ -920,6 +1191,7 @@ app.on('before-quit', (event) => {
     }
     cleanupTimers()
     tray?.destroy()
+    if (typeof edgeWindow !== 'undefined') edgeWindow?.destroy()
     launcherWindow?.destroy()
     creatorWindow?.destroy()
     settingsWindow?.destroy()

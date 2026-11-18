@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { app, dialog, nativeImage, net, shell, type BrowserWindow } from 'electron'
@@ -8,6 +8,7 @@ import Store from 'electron-store'
 import { z } from 'zod'
 import { loadRecoverableConfig } from './configRecovery'
 import { parseDiscoveredApplications, powershellDiscoveryScript } from './applicationDiscovery'
+import { matchesSearchQuery } from '../shared/pinyin'
 import {
   installedAppCandidateSchema,
   isLaunchableApplicationShortcut,
@@ -152,7 +153,9 @@ export class LauncherController {
 
   constructor(
     private readonly store: Store<LauncherStoreData>,
-    private readonly onChange: (state: LauncherState) => void
+    private readonly onChange: (state: LauncherState) => void,
+    private readonly cachePath?: string,
+    private readonly bridgeExecutablePath?: string
   ) {
     const loaded = loadRecoverableConfig(store, launcherStoreSchema, (value) => {
       const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -196,14 +199,45 @@ export class LauncherController {
     if (this.data.entries.length + additions > maxLauncherEntries) throw new Error(`最多添加 ${maxLauncherEntries} 个快捷入口`)
   }
 
+  private loadDiskCache(): DiscoveredTarget[] | null {
+    if (!this.cachePath || !existsSync(this.cachePath)) return null
+    try {
+      const parsed = JSON.parse(readFileSync(this.cachePath, 'utf8')) as { updatedAt?: number; items?: DiscoveredTarget[] }
+      if (!parsed || !Array.isArray(parsed.items)) return null
+      if (typeof parsed.updatedAt === 'number' && Date.now() - parsed.updatedAt > 6 * 60 * 60 * 1000) return null
+      return parsed.items
+    } catch { return null }
+  }
+
+  private saveDiskCache(items: DiscoveredTarget[]) {
+    if (!this.cachePath) return
+    try {
+      writeFileSync(this.cachePath, JSON.stringify({ updatedAt: Date.now(), items }), 'utf8')
+    } catch { }
+  }
+
   async discoverInstalledApps(refresh = false) {
+    if (!this.candidates.size && !refresh) {
+      const cached = this.loadDiskCache()
+      if (cached?.length) {
+        for (const item of cached) this.candidates.set(item.id, item)
+      }
+    }
     if (!this.candidates.size || refresh) {
-      const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', powershellDiscoveryScript], {
-        windowsHide: true,
-        timeout: 30_000,
-        maxBuffer: 8 * 1024 * 1024,
-        encoding: 'utf8'
-      })
+      const useNativeBridge = Boolean(this.bridgeExecutablePath && existsSync(this.bridgeExecutablePath))
+      const { stdout } = useNativeBridge
+        ? await execFileAsync(this.bridgeExecutablePath!, ['--discover-apps'], {
+            windowsHide: true,
+            timeout: 20_000,
+            maxBuffer: 12 * 1024 * 1024,
+            encoding: 'utf8'
+          })
+        : await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', powershellDiscoveryScript], {
+            windowsHide: true,
+            timeout: 30_000,
+            maxBuffer: 8 * 1024 * 1024,
+            encoding: 'utf8'
+          })
       const raw = stdout.trim() ? JSON.parse(stdout) as unknown : []
       const applications = parseDiscoveredApplications(raw)
       const candidates = new Map<string, DiscoveredTarget>()
@@ -221,6 +255,7 @@ export class LauncherController {
         })
       }
       this.candidates = candidates
+      this.saveDiskCache([...candidates.values()])
       const icons = new Map([...candidates.values()].map((candidate) => [targetKey(candidate), candidate.icon]))
       const entries = this.data.entries.map((entry) => {
         const icon = icons.get(targetKey(entry))
@@ -432,19 +467,19 @@ export class LauncherController {
   }
 
   searchEntries(value: unknown): LauncherSearchItem[] {
-    const query = z.string().max(32767).parse(value).trim().toLocaleLowerCase()
+    const query = z.string().max(32767).parse(value).trim()
     const found = new Map<string, LauncherSearchItem>()
     for (const [source, entries] of [['local', this.data.localEntries], ['entry', this.data.entries], ['recent', this.data.recentEntries]] as const) {
       for (const entry of entries) {
         const key = targetKey(entry)
-        if (!found.has(key) && `${entry.name} ${entry.target}`.toLocaleLowerCase().includes(query)) {
+        if (!found.has(key) && (matchesSearchQuery(entry.name, query) || entry.target.toLocaleLowerCase().includes(query.toLocaleLowerCase()))) {
           found.set(key, { id: entry.id, source, name: entry.name, kind: entry.kind, icon: entry.icon, detail: entry.target })
         }
       }
     }
     for (const entry of this.candidates.values()) {
       const key = targetKey(entry)
-      if (!found.has(key) && entry.name.toLocaleLowerCase().includes(query)) found.set(key, { id: entry.id, source: 'installed', name: entry.name, kind: 'app', icon: entry.icon, detail: '已扫描的应用' })
+      if (!found.has(key) && matchesSearchQuery(entry.name, query)) found.set(key, { id: entry.id, source: 'installed', name: entry.name, kind: 'app', icon: entry.icon, detail: '已扫描的应用' })
     }
     return [...found.values()]
   }

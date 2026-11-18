@@ -31,6 +31,7 @@ public sealed class SafeOrganizerService(WorkspacePaths paths, SqliteCacheStore 
             {
                 var item = entry.Metadata;
                 var source = Path.GetFullPath(item.SourceFilePath);
+                if (!File.Exists(source) && !Directory.Exists(source)) continue;
                 if (WorkspacePaths.IsWithin(source, paths.SandboxRoot))
                     throw new IOException("扫描来源不能是整理沙盒。");
                 var attributes = File.GetAttributes(source);
@@ -67,7 +68,10 @@ public sealed class SafeOrganizerService(WorkspacePaths paths, SqliteCacheStore 
         catch
         {
             foreach (var file in createdFiles.AsEnumerable().Reverse())
+            {
                 if (File.Exists(file)) File.Delete(paths.RequireSandboxPath(file));
+                CleanupEmptyAncestors(Path.GetDirectoryName(file), paths.SandboxRoot);
+            }
             throw;
         }
     }
@@ -79,7 +83,7 @@ public sealed class SafeOrganizerService(WorkspacePaths paths, SqliteCacheStore 
         {
             return await Task.Run(() =>
             {
-                var batch = batchId ?? store.GetCompletedTransactions().FirstOrDefault()?.BatchId;
+                var batch = batchId ?? store.GetLatestCompletedBatchId();
                 if (batch == null) return new RollbackReport(null, 0);
                 var records = store.GetCompletedTransactions(batch);
                 // Validate the entire batch before deleting anything; user edits must survive rollback.
@@ -91,12 +95,32 @@ public sealed class SafeOrganizerService(WorkspacePaths paths, SqliteCacheStore 
                         throw new IOException("沙盒文件已被修改，已保留：" + destination);
                 }
                 foreach (var record in records)
-                    if (File.Exists(record.DestinationPath)) File.Delete(paths.RequireSandboxPath(record.DestinationPath));
+                {
+                    if (File.Exists(record.DestinationPath))
+                    {
+                        var destination = paths.RequireSandboxPath(record.DestinationPath);
+                        File.Delete(destination);
+                        CleanupEmptyAncestors(Path.GetDirectoryName(destination), Path.Combine(paths.SandboxRoot, "Modular_Boxes"));
+                    }
+                }
                 store.MarkRolledBack(batch);
                 return new RollbackReport(batch, records.Count);
             });
         }
         finally { gate.Release(); }
+    }
+
+    private static void CleanupEmptyAncestors(string? directory, string stopAt)
+    {
+        var boundary = Path.GetFullPath(stopAt).TrimEnd(Path.DirectorySeparatorChar);
+        while (!string.IsNullOrEmpty(directory))
+        {
+            var full = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar);
+            if (full.Equals(boundary, StringComparison.OrdinalIgnoreCase) || !WorkspacePaths.IsWithin(full, boundary)) break;
+            if (!Directory.Exists(full) || Directory.EnumerateFileSystemEntries(full).Any()) break;
+            try { Directory.Delete(full); } catch { break; }
+            directory = Path.GetDirectoryName(full);
+        }
     }
 
     public async Task ReclassifySandboxAsync(DesktopItemMetadata item, AppCategory category)

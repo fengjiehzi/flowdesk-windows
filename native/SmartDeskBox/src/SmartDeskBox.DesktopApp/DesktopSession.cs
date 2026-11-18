@@ -15,6 +15,8 @@ public sealed class DesktopSession : IDisposable
     private readonly DispatcherTimer scanTimer = new() { Interval = TimeSpan.FromMilliseconds(900) };
     private readonly List<FileSystemWatcher> watchers = [];
     private DesktopIconLease? icons;
+    private System.Windows.Interop.HwndSource? ownerSource;
+    private uint taskbarCreatedMessage;
     private bool disposed;
     private bool layoutRefreshPending;
     public List<DesktopBoxWindow> Windows { get; } = [];
@@ -50,13 +52,37 @@ public sealed class DesktopSession : IDisposable
         }.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(path)) continue;
-            var watcher = new FileSystemWatcher(path) { NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite, EnableRaisingEvents = true };
-            watcher.Created += Changed; watcher.Deleted += Changed; watcher.Renamed += Renamed; watcher.Changed += Changed;
+            var watcher = new FileSystemWatcher(path) { NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName, EnableRaisingEvents = true };
+            watcher.Created += Changed; watcher.Deleted += Changed; watcher.Renamed += Renamed;
             watcher.Error += (_, _) => QueueScan();
             watchers.Add(watcher);
         }
         SystemEvents.DisplaySettingsChanged += DisplayChanged;
+        taskbarCreatedMessage = DesktopNative.RegisterWindowMessage("TaskbarCreated");
+        var ownerHandle = new System.Windows.Interop.WindowInteropHelper(owner).Handle;
+        if (ownerHandle != IntPtr.Zero)
+        {
+            ownerSource = System.Windows.Interop.HwndSource.FromHwnd(ownerHandle);
+            ownerSource?.AddHook(OwnerWndProc);
+        }
         shellTimer.Start();
+    }
+
+    private IntPtr OwnerWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (taskbarCreatedMessage != 0 && msg == taskbarCreatedMessage && IsActive && !disposed)
+        {
+            owner.Dispatcher.BeginInvoke(() =>
+            {
+                if (!disposed && IsActive)
+                {
+                    try { Rebuild(false); }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+                    { owner.SetDesktopStatus("桌面重启后将自动重试挂载：" + ex.Message); }
+                }
+            });
+        }
+        return IntPtr.Zero;
     }
 
     public void Show()
@@ -86,11 +112,19 @@ public sealed class DesktopSession : IDisposable
         if (Windows.Any(window => window.HasActiveInteraction)) { layoutRefreshPending = true; return; }
         layoutRefreshPending = false;
         var (host, iconWindow) = DesktopNative.FindDesktop();
+        var previousIcons = icons;
+        icons = null;
         CloseWindows();
         try
         {
             var active = ActiveBoxes;
-            if (active.Count == 0) { IsActive = false; owner.SetDesktopStatus("桌面没有可分类项目，系统图标保持显示。"); return; }
+            if (active.Count == 0)
+            {
+                previousIcons?.Dispose();
+                IsActive = false;
+                owner.SetDesktopStatus("桌面没有可分类项目，系统图标保持显示。");
+                return;
+            }
             var plan = DesktopLayout.Plan(active);
             foreach (var box in active)
             {
@@ -110,11 +144,14 @@ public sealed class DesktopSession : IDisposable
                 window.Attach(host, DesktopLayout.Restore(reset ? null : store.GetLayout(box.Info.Category), plan[box.Info.Category]));
                 Save(window);
             }
-            icons = new(iconWindow, executablePath);
+            icons = previousIcons is not null && DesktopNative.IsWindow(iconWindow) && !DesktopNative.HasVisibleStyle(iconWindow)
+                ? previousIcons
+                : new(iconWindow, executablePath);
+            if (!ReferenceEquals(icons, previousIcons)) previousIcons?.Dispose();
             IsActive = true;
-        owner.SetDesktopStatus($"已显示 {active.Count} 个分区 · 分类不移动原文件");
+            owner.SetDesktopStatus($"已显示 {active.Count} 个分区 · 分类不移动原文件");
         }
-        catch { CloseWindows(); throw; }
+        catch { previousIcons?.Dispose(); CloseWindows(); throw; }
     }
 
     public void Save(DesktopBoxWindow window)
@@ -142,13 +179,31 @@ public sealed class DesktopSession : IDisposable
         Windows.Clear();
     }
 
-    private void Changed(object sender, FileSystemEventArgs e) => QueueScan();
+    private static bool ShouldIgnoreFileName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return true;
+        return name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("~$", StringComparison.Ordinal)
+            || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".part", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Changed(object sender, FileSystemEventArgs e)
+    {
+        if (!ShouldIgnoreFileName(e.Name)) QueueScan();
+    }
     private void Renamed(object sender, RenamedEventArgs e)
     {
-        try { store.TransferManual(e.OldFullPath, e.FullPath, true); }
-        catch (Microsoft.Data.Sqlite.SqliteException exception)
-        { owner.Dispatcher.BeginInvoke(() => owner.SetDesktopStatus("重命名后的分类记录更新失败：" + exception.Message)); }
-        QueueScan();
+        if (ShouldIgnoreFileName(e.OldName) && ShouldIgnoreFileName(e.Name)) return;
+        owner.Dispatcher.BeginInvoke(() =>
+        {
+            if (disposed) return;
+            try { store.TransferManual(e.OldFullPath, e.FullPath, true); }
+            catch (Microsoft.Data.Sqlite.SqliteException exception)
+            { owner.SetDesktopStatus("重命名后的分类记录更新失败：" + exception.Message); }
+            QueueScan();
+        });
     }
     private void QueueScan() => owner.Dispatcher.BeginInvoke(() =>
     {
@@ -169,6 +224,7 @@ public sealed class DesktopSession : IDisposable
         if (disposed) return;
         disposed = true;
         shellTimer.Stop(); scanTimer.Stop();
+        ownerSource?.RemoveHook(OwnerWndProc);
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         foreach (var watcher in watchers) watcher.Dispose();
         Hide();

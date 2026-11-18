@@ -13,11 +13,15 @@ internal sealed class ClipboardArchiveListener : IDisposable
         ".mp4", ".mov", ".mkv", ".avi", ".wmv", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp"
     };
 
+    private const long MaxMediaCopyBytes = 50L * 1024 * 1024;
     private readonly Action<object> _write;
     private readonly object _queueLock = new();
     private ClipboardWindow? _window;
     private Task _writeQueue = Task.CompletedTask;
     private string? _rootPath;
+    private uint _lastSequence;
+    private string? _lastText;
+    private DateTime _lastTextTime;
     private bool _enabled;
     private bool _disposed;
 
@@ -71,35 +75,105 @@ internal sealed class ClipboardArchiveListener : IDisposable
     {
         var rootPath = _rootPath;
         if (!_enabled || rootPath is null) return;
+        var sequence = NativeMethods.GetClipboardSequenceNumber();
+        if (sequence != 0 && sequence == _lastSequence) return;
+        _lastSequence = sequence;
         try
         {
+            var data = Clipboard.GetDataObject();
+            if (data is null) return;
+            // 遵守 Windows 11 剪贴板隐私标记，跳过密码管理器等敏感内容。
+            if (data.GetDataPresent("ExcludeClipboardContentFromMonitorProcessing")) return;
+            if (data.GetDataPresent("CanIncludeInClipboardHistory")
+                && data.GetData("CanIncludeInClipboardHistory") is MemoryStream historyFlag
+                && historyFlag.Length > 0 && historyFlag.ToArray()[0] == 0)
+            {
+                return;
+            }
+
             var now = DateTime.Now;
-            if (Clipboard.ContainsFileDropList())
+            var createdIso = now.ToUniversalTime().ToString("O");
+            if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] dropPaths)
             {
-                var paths = Clipboard.GetFileDropList()
-                    .Cast<string>()
-                    .Where(path => File.Exists(path) && IsMediaFile(path))
+                var paths = dropPaths
+                    .Where(path =>
+                    {
+                        try
+                        {
+                            if (!File.Exists(path) || !IsMediaFile(path)) return false;
+                            var length = new FileInfo(path).Length;
+                            return length > 0 && length <= MaxMediaCopyBytes;
+                        }
+                        catch { return false; }
+                    })
                     .ToArray();
-                if (paths.Length > 0) Enqueue(() => CopyMediaFiles(rootPath, paths, now));
+                if (paths.Length > 0) Enqueue(() =>
+                {
+                    var copiedPath = CopyMediaFiles(rootPath, paths, now);
+                    return new
+                    {
+                        id = Guid.NewGuid().ToString(),
+                        kind = "file",
+                        preview = paths.Length == 1 ? Path.GetFileName(paths[0]) : $"{Path.GetFileName(paths[0])} 等 {paths.Length} 个媒体文件",
+                        filePath = copiedPath,
+                        createdAt = createdIso
+                    };
+                });
                 return;
             }
 
-            if (Clipboard.ContainsImage())
+            if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is System.Drawing.Bitmap bitmap)
             {
-                using var image = Clipboard.GetImage();
-                if (image is null) return;
-                using var stream = new MemoryStream();
-                image.Save(stream, ImageFormat.Png);
-                var bytes = stream.ToArray();
-                Enqueue(() => SaveBitmap(rootPath, bytes, now));
+                var copy = new System.Drawing.Bitmap(bitmap);
+                Enqueue(() =>
+                {
+                    using (copy)
+                    {
+                        using var stream = new MemoryStream();
+                        copy.Save(stream, ImageFormat.Png);
+                        var savedPath = SaveBitmap(rootPath, stream.ToArray(), now);
+                        var thumbWidth = Math.Max(1, Math.Min(96, copy.Width));
+                        var thumbHeight = Math.Max(1, (int)Math.Round(copy.Height * (thumbWidth / (double)Math.Max(1, copy.Width))));
+                        using var thumb = new System.Drawing.Bitmap(copy, new System.Drawing.Size(thumbWidth, thumbHeight));
+                        using var thumbStream = new MemoryStream();
+                        thumb.Save(thumbStream, ImageFormat.Png);
+                        return new
+                        {
+                            id = Guid.NewGuid().ToString(),
+                            kind = "image",
+                            preview = $"截图 ({copy.Width}×{copy.Height})",
+                            filePath = savedPath,
+                            thumbnail = "data:image/png;base64," + Convert.ToBase64String(thumbStream.ToArray()),
+                            createdAt = createdIso
+                        };
+                    }
+                });
                 return;
             }
 
-            if (Clipboard.ContainsText(TextDataFormat.UnicodeText))
+            if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string text && text.Length > 0)
             {
-                var text = Clipboard.GetText(TextDataFormat.UnicodeText);
-                if (text.Length > 0) Enqueue(() => AppendText(rootPath, text, now));
+                if (_lastText == text && now - _lastTextTime < TimeSpan.FromSeconds(2)) return;
+                _lastText = text;
+                _lastTextTime = now;
+                Enqueue(() =>
+                {
+                    AppendText(rootPath, text, now);
+                    var normalized = text.Replace("\r\n", " ").Replace('\n', ' ').Trim();
+                    return new
+                    {
+                        id = Guid.NewGuid().ToString(),
+                        kind = "text",
+                        preview = normalized.Length <= 140 ? normalized : normalized[..140] + "…",
+                        text = text.Length <= 16_000 ? text : text[..16_000],
+                        createdAt = createdIso
+                    };
+                });
             }
+        }
+        catch (ExternalException)
+        {
+            // 其他前台应用正占用剪贴板锁，静默跳过避免冲突报错弹窗。
         }
         catch (Exception error)
         {
@@ -107,7 +181,7 @@ internal sealed class ClipboardArchiveListener : IDisposable
         }
     }
 
-    private void Enqueue(Action action)
+    private void Enqueue(Func<object> action)
     {
         lock (_queueLock)
         {
@@ -116,8 +190,8 @@ internal sealed class ClipboardArchiveListener : IDisposable
                 {
                     try
                     {
-                        action();
-                        _write(new { type = "clipboardArchiveSaved" });
+                        var item = action();
+                        _write(new { type = "clipboardArchiveSaved", item });
                     }
                     catch (Exception error)
                     {
@@ -141,9 +215,10 @@ internal sealed class ClipboardArchiveListener : IDisposable
         );
     }
 
-    private void CopyMediaFiles(string rootPath, IEnumerable<string> sourcePaths, DateTime now)
+    private string? CopyMediaFiles(string rootPath, IEnumerable<string> sourcePaths, DateTime now)
     {
         Exception? failure = null;
+        string? firstTarget = null;
         var mediaDirectory = MediaDirectory(rootPath);
         Directory.CreateDirectory(mediaDirectory);
         foreach (var sourcePath in sourcePaths)
@@ -152,6 +227,7 @@ internal sealed class ClipboardArchiveListener : IDisposable
             {
                 var targetPath = UniquePath(mediaDirectory, Path.GetFileName(sourcePath), now);
                 File.Copy(sourcePath, targetPath);
+                firstTarget ??= targetPath;
             }
             catch (Exception error)
             {
@@ -159,14 +235,16 @@ internal sealed class ClipboardArchiveListener : IDisposable
             }
         }
         if (failure is not null) throw failure;
+        return firstTarget;
     }
 
-    private static void SaveBitmap(string rootPath, byte[] bytes, DateTime now)
+    private static string SaveBitmap(string rootPath, byte[] bytes, DateTime now)
     {
         var mediaDirectory = MediaDirectory(rootPath);
         Directory.CreateDirectory(mediaDirectory);
         var targetPath = UniquePath(mediaDirectory, $"{now:yyyyMMdd_HHmmssfff}.png", now);
         File.WriteAllBytes(targetPath, bytes);
+        return targetPath;
     }
 
     private void WriteError(Exception error)
@@ -250,4 +328,7 @@ internal static partial class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    internal static extern uint GetClipboardSequenceNumber();
 }

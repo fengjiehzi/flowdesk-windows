@@ -13,7 +13,8 @@ public sealed class WorkspacePaths
         foreach (var desktop in RealDesktops())
             if (IsWithin(Root, desktop))
                 throw new InvalidOperationException("工作区不能位于真实桌面目录中。");
-        EnsureNoReparsePoints(Root);
+        if (Directory.Exists(Root) && (File.GetAttributes(Root) & FileAttributes.ReparsePoint) != 0)
+            throw new IOException("拒绝通过符号链接或目录联接写入：" + Root);
     }
 
     public static WorkspacePaths Discover()
@@ -42,12 +43,18 @@ public sealed class WorkspacePaths
             path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
-    public static void EnsureNoReparsePoints(string path)
+    public static void EnsureNoReparsePoints(string path, string? stopAt = null)
     {
+        var boundary = stopAt is null ? null : Path.GetFullPath(stopAt).TrimEnd(Path.DirectorySeparatorChar);
         for (var current = new DirectoryInfo(Path.GetFullPath(path)); current != null; current = current.Parent)
+        {
+            var full = current.FullName.TrimEnd(Path.DirectorySeparatorChar);
             if ((current.Exists || File.Exists(current.FullName)) &&
                 (File.GetAttributes(current.FullName) & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("拒绝通过符号链接或目录联接写入：" + current.FullName);
+            if (boundary != null && full.Equals(boundary, StringComparison.OrdinalIgnoreCase)) break;
+            if (boundary is null) break;
+        }
     }
 
     public string RequireSandboxPath(string path)
@@ -56,7 +63,7 @@ public sealed class WorkspacePaths
         if (!IsWithin(full, SandboxRoot) || full.Equals(SandboxRoot, StringComparison.OrdinalIgnoreCase) ||
             RealDesktops().Any(d => IsWithin(full, d)))
             throw new InvalidOperationException("操作路径越出沙盒边界：" + full);
-        EnsureNoReparsePoints(full);
+        EnsureNoReparsePoints(full, SandboxRoot);
         return full;
     }
 }

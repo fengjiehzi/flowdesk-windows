@@ -7,8 +7,10 @@ type Options = {
   executablePath: string
   dataPath: string
   enabled: boolean
+  accent?: string
   onState: (state: DesktopBoxesState) => void
   onEnabledChange: (enabled: boolean) => void
+  onLog?: (message: string) => void
   probe?: boolean
 }
 
@@ -19,9 +21,12 @@ export class DesktopBoxesController {
   private sequence = 0
   private stopping = false
   private ready = false
+  private currentAccent: string | null = null
   private pending = new Map<number, { resolve: (state: DesktopBoxesState) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>()
 
-  constructor(private readonly options: Options) {}
+  constructor(private readonly options: Options) {
+    this.currentAccent = options.accent ?? null
+  }
 
   getState() { return { ...this.state } }
 
@@ -62,7 +67,10 @@ export class DesktopBoxesController {
           clearTimeout(timer)
           ready = message.ready
           this.ready = ready
-          if (ready) resolve()
+          if (ready) {
+            if (this.currentAccent) void this.send('theme', { accent: this.currentAccent }).catch(() => {})
+            resolve()
+          }
           else reject(new Error(message.error || '桌面整理启动失败'))
         }
         if (message.id !== undefined) {
@@ -74,8 +82,12 @@ export class DesktopBoxesController {
           else request.reject(new Error(message.error || '桌面整理操作失败'))
         }
       })
-      // Drain stderr so a native diagnostic cannot block the module.
-      child.stderr.resume()
+      // 记录原生模块异常诊断输出并防止缓冲区阻塞。
+      child.stderr.setEncoding('utf8')
+      child.stderr.on('data', (chunk: string) => {
+        const text = chunk.trim()
+        if (text) this.options.onLog?.(text)
+      })
       child.stdin.on('error', () => {})
       const finish = (error?: Error, clean = false) => {
         if (finished) return
@@ -103,7 +115,7 @@ export class DesktopBoxesController {
 
   async command(input: unknown): Promise<DesktopBoxesState> {
     const action = desktopBoxesActionSchema.parse(input)
-    if (action === 'exit') throw new Error('退出命令仅由流屿桌面主进程使用')
+    if (action === 'exit' || action === 'theme') throw new Error('退出命令仅由流屿桌面主进程使用')
     if (this.stopping) throw new Error('桌面整理正在退出，请稍后重试。')
     if (!this.child && action === 'hide') {
       this.options.enabled = false
@@ -115,7 +127,13 @@ export class DesktopBoxesController {
     return this.send(action)
   }
 
-  private send(action: DesktopBoxesAction) {
+  async syncTheme(accent: string) {
+    this.currentAccent = accent
+    if (!this.child || !this.ready || this.stopping) return
+    await this.send('theme', { accent }).catch(() => {})
+  }
+
+  private send(action: DesktopBoxesAction, extra: Record<string, unknown> = {}) {
     const child = this.child
     if (!child || child.stdin.destroyed) return Promise.reject(new Error('桌面整理模块未运行'))
     const id = ++this.sequence
@@ -125,7 +143,7 @@ export class DesktopBoxesController {
         reject(new Error('桌面整理操作仍未完成，请完成文件操作后重试。'))
       }, action === 'refresh' ? 120_000 : 10_000)
       this.pending.set(id, { resolve, reject, timer })
-      child.stdin.write(`${JSON.stringify({ id, action })}\n`, 'utf8', error => {
+      child.stdin.write(`${JSON.stringify({ id, action, ...extra })}\n`, 'utf8', error => {
         if (!error) return
         clearTimeout(timer)
         this.pending.delete(id)

@@ -17,7 +17,7 @@ export function DesktopBoxesControls({ active }: { active: boolean }) {
     return () => { live = false; unsubscribe() }
   }, [active])
 
-  const command = async (action: Exclude<DesktopBoxesAction, 'exit'>) => {
+  const command = async (action: Exclude<DesktopBoxesAction, 'exit' | 'theme'>) => {
     if (working) return
     setWorking(true)
     setError('')

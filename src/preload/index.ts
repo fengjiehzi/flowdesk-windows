@@ -2,12 +2,12 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IslandSettingsPatch } from '../shared/settings'
 import type { InstalledAppCandidate, LauncherState, WebsiteShortcutInput, LauncherSearchItem, LauncherSearchRequest, LauncherLaunchResult } from '../shared/launcher'
 import type { NotificationCenterState } from '../shared/notifications'
-import type { IslandSnapshot, SettingsUpdateResult } from '../shared/types'
+import type { IslandPanelView, IslandSnapshot, SettingsUpdateResult } from '../shared/types'
 import type { DesktopBoxesAction, DesktopBoxesState } from '../shared/desktopBoxes'
 
 contextBridge.exposeInMainWorld('island', {
   getDesktopBoxesState: () => ipcRenderer.invoke('desktopBoxes:getState') as Promise<DesktopBoxesState>,
-  desktopBoxesCommand: (action: Exclude<DesktopBoxesAction, 'exit'>) => ipcRenderer.invoke('desktopBoxes:command', action) as Promise<DesktopBoxesState>,
+  desktopBoxesCommand: (action: Exclude<DesktopBoxesAction, 'exit' | 'theme'>) => ipcRenderer.invoke('desktopBoxes:command', action) as Promise<DesktopBoxesState>,
   onDesktopBoxesState: (callback: (state: DesktopBoxesState) => void) => {
     const listener = (_: Electron.IpcRendererEvent, state: DesktopBoxesState) => callback(state)
     ipcRenderer.on('desktopBoxes:state', listener)
@@ -43,8 +43,11 @@ contextBridge.exposeInMainWorld('island', {
   clearNotificationHistory: () => ipcRenderer.invoke('notifications:clear') as Promise<void>,
   openNotificationSettings: () => ipcRenderer.invoke('notifications:openSettings') as Promise<void>,
   openClipboardArchiveDirectory: () => ipcRenderer.invoke('clipboardArchive:openDirectory') as Promise<void>,
+  copyClipboardItem: (id: string) => ipcRenderer.invoke('clipboardArchive:copyItem', id) as Promise<boolean>,
+  clearClipboardItems: () => ipcRenderer.invoke('clipboardArchive:clearItems') as Promise<void>,
   openNotificationSource: (appId: string) => ipcRenderer.invoke('notifications:openSource', appId) as Promise<void>,
-  openPanel: (view: 'launcher' | 'notifications') => ipcRenderer.send('notifications:openPanel', view),
+  openPanel: (view: IslandPanelView) => ipcRenderer.send('notifications:openPanel', view),
+  notifyEdgeTrigger: () => ipcRenderer.send('island:edgeTrigger'),
   setNotificationPreviewHovered: (hovered: boolean) => ipcRenderer.send('notifications:hovered', hovered),
   openLauncherManager: () => ipcRenderer.send('launcher:openManager'),
   setExpanded: (expanded: boolean) => ipcRenderer.send('island:setExpanded', expanded),
@@ -78,8 +81,8 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.on('notifications:state', listener)
     return () => ipcRenderer.off('notifications:state', listener)
   },
-  onPanelView: (callback: (view: 'launcher' | 'notifications') => void) => {
-    const listener = (_: Electron.IpcRendererEvent, view: 'launcher' | 'notifications') => callback(view)
+  onPanelView: (callback: (view: IslandPanelView) => void) => {
+    const listener = (_: Electron.IpcRendererEvent, view: IslandPanelView) => callback(view)
     ipcRenderer.on('island:panelView', listener)
     return () => ipcRenderer.off('island:panelView', listener)
   }

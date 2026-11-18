@@ -8,11 +8,17 @@ import {
   BellOff,
   Check,
   ChevronUp,
+  ClipboardList,
   Copy,
   ExternalLink,
+  File,
+  FileCode2,
+  Folder,
   FolderOpen,
   Globe2,
   GripVertical,
+  Image as ImageIcon,
+  Keyboard,
   Library,
   Link2,
   MonitorDown,
@@ -28,17 +34,19 @@ import {
   Waves,
   X,
 } from 'lucide-react'
+import { topEdgeDwellMs } from '../../shared/edgeActivation'
 import { applySettingsPatch, defaultSettings, type FluidCloudCreation, type FluidCloudSettings, type IslandSettings, type IslandSettingsPatch } from '../../shared/settings'
-import { isSurfaceActive, type IslandSurface } from '../../shared/islandPresentation'
+import { type IslandSurface } from '../../shared/islandPresentation'
 import { launcherNameSchema, maxLauncherEntries, normalizeWebsiteUrl, type InstalledAppCandidate, type LauncherEntryView, type LauncherState } from '../../shared/launcher'
-import type { NotificationCenterState, NotificationSource, SystemNotificationItem } from '../../shared/notifications'
+import type { NotificationCenterState } from '../../shared/notifications'
+import { matchesSearchQuery } from '../../shared/pinyin'
 import {
   triggerPresetCategories,
   triggerPresets,
   triggerStyles,
   type TriggerStyle
 } from '../../shared/triggerGesture'
-import type { IslandSnapshot } from '../../shared/types'
+import type { IslandPanelView, IslandSnapshot } from '../../shared/types'
 import { FluxCanvas } from './fluxCanvas'
 import { SettingsPersistence, type SaveStatus } from './settingsPersistence'
 import { LauncherWorkspace } from './LauncherWorkspace'
@@ -78,10 +86,50 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 const surfaceParameter = new URLSearchParams(window.location.search).get('surface')
 const previewVariant = new URLSearchParams(window.location.search).get('variant')
-type RendererSurface = IslandSurface | 'creator' | 'settings' | 'launcher'
-const requestedSurface: RendererSurface | null = surfaceParameter === 'compact' || surfaceParameter === 'panel' || surfaceParameter === 'creator' || surfaceParameter === 'settings' || surfaceParameter === 'launcher'
+type RendererSurface = IslandSurface | 'edge' | 'creator' | 'settings' | 'launcher'
+const requestedSurface: RendererSurface | null = surfaceParameter === 'compact' || surfaceParameter === 'panel' || surfaceParameter === 'edge' || surfaceParameter === 'creator' || surfaceParameter === 'settings' || surfaceParameter === 'launcher'
   ? surfaceParameter
   : null
+
+// 顶部 2px 透明感应条：仅在未按住鼠标键时触发驻留计时，规避 Win11 顶部拖拽分屏栏误触。
+function EdgeSensor() {
+  const dwellTimer = useRef<number | null>(null)
+  const triggered = useRef(false)
+
+  const clearDwell = () => {
+    if (dwellTimer.current !== null) {
+      window.clearTimeout(dwellTimer.current)
+      dwellTimer.current = null
+    }
+    triggered.current = false
+  }
+
+  useEffect(() => clearDwell, [])
+
+  const handlePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.buttons !== 0) {
+      clearDwell()
+      return
+    }
+    if (triggered.current || dwellTimer.current !== null) return
+    dwellTimer.current = window.setTimeout(() => {
+      dwellTimer.current = null
+      triggered.current = true
+      window.island?.notifyEdgeTrigger()
+    }, topEdgeDwellMs)
+  }
+
+  return (
+    <div
+      className="edgeSensor"
+      onPointerEnter={handlePointer}
+      onPointerMove={handlePointer}
+      onPointerLeave={clearDwell}
+      onPointerDown={clearDwell}
+      onPointerCancel={clearDwell}
+    />
+  )
+}
 
 const palettes = {
   graphite: ['#0b0d10', '#f3f5f7', '#52d273', '#06080b'],
@@ -137,6 +185,7 @@ const previewNotificationState: NotificationCenterState = {
   bridgeStatus: 'stopped',
   clipboardArchiveError: null,
   clipboardArchiveActive: false,
+  clipboardItems: [],
   unreadCount: window.island ? 0 : 2,
   sources: window.island ? [] : [{ id: 'preview-feishu', name: '飞书', muted: false }],
   desktopAdapters: [
@@ -217,14 +266,18 @@ function formatDate(date: Date) {
 
 function ShortcutIcon({ entry, size = 22 }: { entry: Pick<LauncherEntryView, 'kind' | 'icon'>; size?: number }) {
   if (entry.icon) return <img className="shortcutImage" src={entry.icon} alt="" />
-  return entry.kind === 'website' ? <Globe2 size={size} /> : <AppWindow size={size} />
+  if (entry.kind === 'website') return <Globe2 size={size} />
+  if (entry.kind === 'folder') return <Folder size={size} />
+  if (entry.kind === 'script') return <FileCode2 size={size} />
+  if (entry.kind === 'file') return <File size={size} />
+  return <AppWindow size={size} />
 }
 
-function CloudBackdrop({ cloud, palette, active = true }: { cloud: FluidCloudSettings; palette: SurfacePalette; active?: boolean }) {
+function CloudBackdrop({ cloud, palette, active = true, interactive = true }: { cloud: FluidCloudSettings; palette: SurfacePalette; active?: boolean; interactive?: boolean }) {
   const colors = fluxSurfaceColors(palette)
   return (
     <span className="cloudBackdrop" aria-hidden>
-      <FluxCanvas cloud={cloud} active={active} className="cloudBackdropArt" {...colors} />
+      <FluxCanvas cloud={cloud} active={active} interactive={interactive} className="cloudBackdropArt" {...colors} />
     </span>
   )
 }
@@ -315,20 +368,20 @@ function NotificationIcon({ item }: { item: { icon?: string; name: string; appNa
   return <span>{(item.appName ?? item.name).slice(0, 1)}</span>
 }
 
-function NotificationPreview({ state, settings }: { state: NotificationCenterState; settings: IslandSettings }) {
+function NotificationPreview({ state, settings, withBackdrop = true }: { state: NotificationCenterState; settings: IslandSettings; withBackdrop?: boolean }) {
   const item = state.items[0]
   if (!item) return null
   const palette = palettes[settings.theme]
   return (
     <button
-      className="notificationPreview capsuleNotification"
+      className={`notificationPreview capsuleNotification ${withBackdrop ? '' : 'sharedBackdrop'}`}
       type="button"
       onMouseEnter={() => window.island?.setNotificationPreviewHovered(true)}
       onMouseLeave={() => window.island?.setNotificationPreviewHovered(false)}
       onClick={() => window.island?.openPanel('notifications')}
       aria-label={`打开 ${item.appName} 通知`}
     >
-      <CloudBackdrop cloud={settings.fluidCloud} palette={palette} />
+      {withBackdrop && <CloudBackdrop cloud={settings.fluidCloud} palette={palette} />}
       <span className="notificationAppIcon"><NotificationIcon item={{ ...item, name: item.appName }} /></span>
       <span className="notificationCopy">
         <span><b>{item.title || item.appName}</b><small>{item.appName}</small></span>
@@ -629,19 +682,77 @@ function CloudStudio({
   )
 }
 
+// 将键盘组合键录制为 Electron Accelerator 标准格式。
+function formatRecordedAccelerator(event: React.KeyboardEvent): string | 'cancel' | 'modifier-only' | 'missing-modifier' {
+  if (event.key === 'Escape') return 'cancel'
+  if (['Control', 'Shift', 'Alt', 'Meta', 'OS'].includes(event.key)) return 'modifier-only'
+  const modifiers: string[] = []
+  if (event.ctrlKey) modifiers.push('Ctrl')
+  if (event.altKey) modifiers.push('Alt')
+  if (event.shiftKey) modifiers.push('Shift')
+  if (event.metaKey) modifiers.push('Super')
+  if (!modifiers.length) return 'missing-modifier'
+
+  const codeMap: Record<string, string> = {
+    Space: 'Space',
+    Backquote: '`',
+    Minus: '-',
+    Equal: '=',
+    BracketLeft: '[',
+    BracketRight: ']',
+    Backslash: '\\',
+    Semicolon: ';',
+    Quote: "'",
+    Comma: ',',
+    Period: '.',
+    Slash: '/'
+  }
+  const keyMap: Record<string, string> = {
+    ' ': 'Space',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+    Enter: 'Return',
+    Backspace: 'Backspace',
+    Delete: 'Delete',
+    Insert: 'Insert',
+    Tab: 'Tab',
+    Home: 'Home',
+    End: 'End',
+    PageUp: 'PageUp',
+    PageDown: 'PageDown'
+  }
+
+  let mainKey = ''
+  if (event.code.startsWith('Key') && event.code.length === 4) mainKey = event.code.slice(3).toUpperCase()
+  else if (event.code.startsWith('Digit') && event.code.length === 6) mainKey = event.code.slice(5)
+  else if (/^F([1-9]|1\d|2[0-4])$/i.test(event.key)) mainKey = event.key.toUpperCase()
+  else if (codeMap[event.code]) mainKey = codeMap[event.code]
+  else if (keyMap[event.key]) mainKey = keyMap[event.key]
+  else if (event.key.length === 1) mainKey = event.key.toUpperCase()
+
+  if (!mainKey) return 'modifier-only'
+  return [...modifiers, mainKey].join('+')
+}
+
 function GeneralSettings({
   settings,
+  shortcutRegistered,
   notificationState,
   onSettingsChange,
   onRequestNotificationAccess,
   notify
 }: {
   settings: IslandSettings
+  shortcutRegistered?: boolean
   notificationState: NotificationCenterState
   onSettingsChange: (patch: Partial<IslandSettings>) => void
   onRequestNotificationAccess: () => void
   notify: (message: string) => void
 }) {
+  const [recordingShortcut, setRecordingShortcut] = useState(false)
+  const [shortcutHint, setShortcutHint] = useState<string | null>(null)
   const accessLabel = {
     disabled: '监听已关闭', unspecified: '等待 Windows 授权', allowed: '已授权，等待新通知',
     denied: 'Windows 已拒绝访问', unavailable: '通知组件缺失，请修复安装', error: '通知服务异常，可重试'
@@ -655,8 +766,82 @@ function GeneralSettings({
       <div className="generalSettingsBody">
         <section className="settingsCard inspectorGroup"><h3>流屿桌面行为</h3>
           <div className="shortcutSummary"><span><b>点击胶囊展开</b><small>胶囊显示后点击展开；鼠标移开后自动隐藏</small></span></div>
-          <div className="shortcutSummary"><span><b>顶部边缘呼出</b><small>平时隐藏，在与胶囊位置对齐的屏幕顶部停留约 0.45 秒显示胶囊</small></span></div>
-          <div className="shortcutSummary"><span><b>全局快捷键</b><small>在当前屏幕显示小胶囊</small></span><kbd>Ctrl + Alt + Space</kbd></div>
+          <div className="shortcutSummary"><span><b>顶部边缘呼出</b><small>平时零轮询待机，在与胶囊位置对齐的屏幕顶部停留约 0.45 秒显示胶囊（拖拽窗口时不触发）</small></span></div>
+          <div className="shortcutSummary shortcutRecorderRow">
+            <span>
+              <b>全局快捷键</b>
+              <small>
+                {shortcutHint
+                  ? shortcutHint
+                  : shortcutRegistered === false
+                    ? '当前快捷键与输入法或其它程序冲突，请点击右侧录制更换'
+                    : settings.hotkeyDirectExpand
+                      ? '按下后直接在鼠标所在屏幕展开搜索面板'
+                      : '按下后在鼠标所在屏幕显示小胶囊'}
+              </small>
+            </span>
+            <div className="shortcutRecorderControls">
+              {shortcutRegistered === false && !recordingShortcut && <em className="shortcutConflictBadge">冲突</em>}
+              <button
+                type="button"
+                className={`shortcutRecordButton ${recordingShortcut ? 'isRecording' : ''} ${shortcutRegistered === false ? 'hasConflict' : ''}`}
+                aria-label="录制全局快捷键"
+                onClick={() => {
+                  setRecordingShortcut((current) => !current)
+                  setShortcutHint(null)
+                }}
+                onBlur={() => {
+                  setRecordingShortcut(false)
+                  setShortcutHint(null)
+                }}
+                onKeyDown={(event) => {
+                  if (!recordingShortcut) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  const result = formatRecordedAccelerator(event)
+                  if (result === 'cancel') {
+                    setRecordingShortcut(false)
+                    setShortcutHint(null)
+                    return
+                  }
+                  if (result === 'modifier-only') return
+                  if (result === 'missing-modifier') {
+                    setShortcutHint('请同时按下 Ctrl / Alt / Shift / Win 修饰键与主键')
+                    return
+                  }
+                  setRecordingShortcut(false)
+                  setShortcutHint(null)
+                  onSettingsChange({ shortcutAccelerator: result })
+                }}
+              >
+                <Keyboard size={13} />
+                <span>{recordingShortcut ? '请按组合键 (Esc 取消)' : settings.shortcutAccelerator.replaceAll('+', ' + ')}</span>
+              </button>
+              {settings.shortcutAccelerator !== defaultSettings.shortcutAccelerator && (
+                <button
+                  type="button"
+                  className="shortcutResetButton"
+                  title="恢复默认 Ctrl+Alt+Space"
+                  aria-label="恢复默认全局快捷键"
+                  onClick={() => {
+                    setRecordingShortcut(false)
+                    setShortcutHint(null)
+                    onSettingsChange({ shortcutAccelerator: defaultSettings.shortcutAccelerator })
+                  }}
+                >
+                  <RotateCcw size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <label className="notificationToggle compactToggle">
+            <span><b>快捷键直接展开搜索面板</b><small>开启后按全局快捷键直接展开启动台并聚焦搜索框，再次按下收起</small></span>
+            <input
+              type="checkbox"
+              checked={settings.hotkeyDirectExpand}
+              onChange={(event) => onSettingsChange({ hotkeyDirectExpand: event.target.checked })}
+            />
+          </label>
           <RangeField label="移开后的隐藏延迟" value={settings.hideDelayMs} min={300} max={3000} step={100} display={`${settings.hideDelayMs}ms`} onChange={(hideDelayMs) => onSettingsChange({ hideDelayMs })} />
         </section>
 
@@ -755,7 +940,7 @@ type LauncherManagerProps = {
 }
 
 function LauncherManager({ state, onStateChange, notify }: LauncherManagerProps) {
-  const [tab, setTab] = useState<'apps' | 'website' | 'selected' | 'local'>(state.setupCompleted ? 'local' : 'apps')
+  const [tab, setTab] = useState<'apps' | 'website' | 'selected' | 'local'>(state.setupCompleted ? (state.entries.length ? 'selected' : 'local') : 'apps')
   const [candidates, setCandidates] = useState<InstalledAppCandidate[]>([])
   const [candidateIds, setCandidateIds] = useState<string[]>([])
   const [search, setSearch] = useState('')
@@ -771,11 +956,9 @@ function LauncherManager({ state, onStateChange, notify }: LauncherManagerProps)
   const [removedEntry, setRemovedEntry] = useState<{ entry: LauncherEntryView; index: number } | null>(null)
   const scanning = useRef(false)
 
-  useEffect(() => { if (state.setupCompleted) setTab('local') }, [state.setupCompleted])
-
   const errorMessage = (error: unknown) => error instanceof Error ? error.message : '操作失败'
   const availableSlots = maxLauncherEntries - state.entries.length
-  const visibleCandidates = candidates.filter(({ name }) => name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+  const visibleCandidates = candidates.filter(({ name }) => matchesSearchQuery(name, search))
 
   const loadApplications = async (refresh = false) => {
     if (scanning.current) return
@@ -1089,7 +1272,7 @@ function LauncherManager({ state, onStateChange, notify }: LauncherManagerProps)
                       }
                     }}
                   />
-                  <span className="launcherEntryKind">{entry.kind === 'website' ? '网站' : '应用'}</span>
+                  <span className="launcherEntryKind">{{ website: '网站', folder: '文件夹', script: '脚本', file: '文件', app: '应用' }[entry.kind]}</span>
                   <div className="launcherRowActions">
                     <button type="button" disabled={index === 0} onClick={() => moveEntry(entry.id, -1)} aria-label={`前移 ${entry.name}`}><ArrowUp size={14} /></button>
                     <button type="button" disabled={index === state.entries.length - 1} onClick={() => moveEntry(entry.id, 1)} aria-label={`后移 ${entry.name}`}><ArrowDown size={14} /></button>
@@ -1164,11 +1347,73 @@ function NotificationPanelContent({
   )
 }
 
+function ClipboardPanelContent({
+  state,
+  settings,
+  onEnable,
+  onCopy,
+  onClear,
+  onOpenDir
+}: {
+  state: NotificationCenterState
+  settings: IslandSettings
+  onEnable: () => void
+  onCopy: (id: string) => void
+  onClear: () => void
+  onOpenDir: () => void
+}) {
+  if (!settings.clipboardArchiveEnabled) {
+    return (
+      <div className="notificationOnboarding">
+        <span><ClipboardList size={22} /></span>
+        <div><b>随时找回复制过的内容</b><p>开启剪贴板归档后，复制的文本与截图会自动保存在本地，点击即可一键回填。</p></div>
+        <button type="button" onClick={onEnable}>启用归档</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="notificationPanelContent clipboardPanelContent">
+      <div className="notificationListHeader">
+        <span>{state.clipboardItems.length} 条剪贴板记录</span>
+        <div className="clipboardHeaderActions">
+          <button type="button" onClick={onOpenDir}>打开目录</button>
+          {state.clipboardItems.length > 0 && <button type="button" onClick={onClear}>清空列表</button>}
+        </div>
+      </div>
+      <div className="notificationList clipboardList">
+        {state.clipboardItems.length ? state.clipboardItems.map((item) => (
+          <button type="button" key={item.id} onClick={() => onCopy(item.id)}>
+            <span className="notificationAppIcon clipboardItemIcon">
+              {item.thumbnail ? <img src={item.thumbnail} alt="" /> : item.kind === 'image' ? <ImageIcon size={17} /> : item.kind === 'file' ? <File size={17} /> : <Copy size={16} />}
+            </span>
+            <span className="notificationListCopy">
+              <span>
+                <b>{item.kind === 'image' ? '截图 / 图片' : item.kind === 'file' ? '文件记录' : '文本片段'}</b>
+                <small>{new Date(item.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}</small>
+              </span>
+              <em>{item.preview || '点击回填到剪贴板'}</em>
+            </span>
+            <span className="clipboardActionHint">{item.kind === 'file' ? '定位' : '回填'}</span>
+          </button>
+        )) : (
+          <div className="notificationEmpty">
+            <ClipboardList size={22} />
+            <span>{state.clipboardArchiveError ? '归档目录暂不可写，请检查设置' : '复制文本或图片后会自动出现在这里'}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const panelTabOrder: readonly IslandPanelView[] = ['launcher', 'notifications', 'clipboard']
+
 function App() {
   const [snapshot, setSnapshot] = useState(previewSnapshot)
   const [launcherState, setLauncherState] = useState(previewLauncherState)
   const [notificationState, setNotificationState] = useState(previewNotificationState)
-  const [panelView, setPanelView] = useState<'launcher' | 'notifications'>('launcher')
+  const [panelView, setPanelView] = useState<IslandPanelView>('launcher')
   const [feedback, setFeedback] = useState<Feedback>({ message: '', sequence: 0 })
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const closeGuard = useRef<() => boolean>(() => true)
@@ -1194,8 +1439,8 @@ function App() {
   useEffect(() => window.island?.onPanelView(setPanelView), [])
 
   useEffect(() => {
-    if (requestedSurface === 'panel' && panelView === 'notifications') void window.island?.markNotificationsRead()
-  }, [panelView])
+    if (snapshot.state === 'EXPANDED' && panelView === 'notifications') void window.island?.markNotificationsRead()
+  }, [snapshot.state, panelView])
 
   useEffect(() => {
     if (!feedback.message || feedback.kind === 'error') return
@@ -1210,15 +1455,20 @@ function App() {
     return persistence.flush()
   }), [persistence])
 
-  const panelState = snapshot.state === 'EXPANDED'
-  const surface: RendererSurface = requestedSurface === 'creator' || requestedSurface === 'settings' || requestedSurface === 'launcher'
-    ? requestedSurface
-    : requestedSurface ?? (panelState ? 'panel' : 'compact')
-  const surfaceActive = surface === 'creator' || surface === 'settings' || surface === 'launcher'
+  if (requestedSurface === 'edge') {
+    return <EdgeSensor />
+  }
+
+  const isIslandSurface = requestedSurface === null || requestedSurface === 'compact' || requestedSurface === 'panel'
+  const morphMode: 'compact' | 'notification' | 'expanded' = snapshot.state === 'EXPANDED'
+    ? 'expanded'
+    : snapshot.compactMode === 'notification'
+      ? 'notification'
+      : 'compact'
+  const surface = isIslandSurface ? (morphMode === 'expanded' ? 'panel' : 'compact') : requestedSurface
+  const surfaceActive = !isIslandSurface
     ? true
-    : requestedSurface
-      ? snapshot.compactMode === 'notification' || isSurfaceActive(surface, snapshot.state)
-    : snapshot.state !== 'HIDDEN'
+    : (!window.island ? snapshot.state !== 'HIDDEN' : snapshot.state !== 'HIDDEN' || snapshot.compactMode === 'notification')
   const palette = palettes[snapshot.settings.theme]
   const date = new Date(snapshot.now)
   const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -1258,9 +1508,13 @@ function App() {
     if (window.island) window.island.setExpanded(expanded)
     else setSnapshot((current) => ({ ...current, state: expanded ? 'EXPANDED' : 'COMPACT' }))
   }
+  const selectPanelTab = (next: IslandPanelView) => {
+    setPanelView(next)
+    if (next === 'notifications') void window.island?.markNotificationsRead()
+  }
   return (
     <main
-      className={`stage surface-${surface} ${surfaceActive ? 'isActive' : 'isInactive'} compact-mode-${snapshot.compactMode}`}
+      className={`stage surface-${surface} ${isIslandSurface ? `surface-island morph-${morphMode} pos-${snapshot.settings.position}` : ''} ${surfaceActive ? 'isActive' : 'isInactive'} compact-mode-${snapshot.compactMode}`}
       style={{
         '--bg': palette[0],
         '--fg': palette[1],
@@ -1277,7 +1531,14 @@ function App() {
         '--cloud-curvature': snapshot.settings.fluidCloud.curvature
       } as React.CSSProperties}
     >
-      <section className="surfaceFrame">
+      <section
+        className="surfaceFrame"
+        onMouseDown={(event) => {
+          if (isIslandSurface && morphMode === 'expanded' && event.target === event.currentTarget) {
+            setExpanded(false)
+          }
+        }}
+      >
         {surface === 'creator' ? (
           <CloudStudio
             settings={snapshot.settings}
@@ -1291,6 +1552,7 @@ function App() {
         ) : surface === 'settings' ? (
           <GeneralSettings
             settings={snapshot.settings}
+            shortcutRegistered={snapshot.shortcutRegistered}
             notificationState={notificationState}
             onSettingsChange={updateGeneralSettings}
             onRequestNotificationAccess={requestNotificationAccess}
@@ -1298,33 +1560,39 @@ function App() {
           />
         ) : surface === 'launcher' ? (
           <LauncherManager state={launcherState} onStateChange={setLauncherState} notify={notify} />
-        ) : surface === 'compact' ? (
-          snapshot.compactMode === 'notification' ? (
-            <NotificationPreview state={notificationState} settings={snapshot.settings} />
-          ) : (
-            <button className="compact" type="button" onClick={() => setExpanded(true)} aria-label="展开流屿桌面">
-              <CloudBackdrop cloud={snapshot.settings.fluidCloud} palette={palette} active={surfaceActive} />
-              <time>{time}</time><span className="pulse" />
-              {notificationState.unreadCount > 0 && <span className={`islandUnreadDot ${notificationState.suppression !== 'accepts' ? 'quiet' : ''}`} aria-label={`${notificationState.unreadCount} 条未读通知`} />}
-            </button>
-          )
         ) : (
-          <div className="panel launcherWorkspaceShell">
-            <CloudBackdrop cloud={snapshot.settings.fluidCloud} palette={palette} active={surfaceActive} />
-            <div className="dashboardPanel workspaceDashboard">
+          <div className={`islandMorphShell mode-${morphMode}`}>
+            <CloudBackdrop cloud={snapshot.settings.fluidCloud} palette={palette} active={surfaceActive} interactive={morphMode !== 'expanded'} />
+
+            <div className={`morphLayer morphCompactLayer ${morphMode === 'compact' ? 'isLayerActive' : ''}`} inert={morphMode !== 'compact'}>
+              <button className="compactMorphContent" type="button" onClick={() => setExpanded(true)} aria-label="展开流屿桌面">
+                <time>{time}</time><span className="pulse" />
+                {notificationState.unreadCount > 0 && <span className={`islandUnreadDot ${notificationState.suppression !== 'accepts' ? 'quiet' : ''}`} aria-label={`${notificationState.unreadCount} 条未读通知`} />}
+              </button>
+            </div>
+
+            <div className={`morphLayer morphNotificationLayer ${morphMode === 'notification' ? 'isLayerActive' : ''}`} inert={morphMode !== 'notification'}>
+              <NotificationPreview state={notificationState} settings={snapshot.settings} withBackdrop={false} />
+            </div>
+
+            <div className={`morphLayer morphExpandedLayer launcherWorkspaceShell ${morphMode === 'expanded' ? 'isLayerActive' : ''}`} inert={morphMode !== 'expanded'}>
+              <div className="dashboardPanel workspaceDashboard">
                 <div className="panelChrome">
                   <div className="panelTabs" role="tablist" aria-label="灵动中心页面" onKeyDown={(event) => {
                     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
                     event.preventDefault()
-                    const next = event.key === 'Home' ? 'launcher' : event.key === 'End' ? 'notifications' : panelView === 'launcher' ? 'notifications' : 'launcher'
-                    setPanelView(next)
+                    const currentIndex = panelTabOrder.indexOf(panelView)
+                    const next = event.key === 'Home'
+                      ? panelTabOrder[0]
+                      : event.key === 'End'
+                        ? panelTabOrder[panelTabOrder.length - 1]
+                        : panelTabOrder[(currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + panelTabOrder.length) % panelTabOrder.length]
+                    selectPanelTab(next)
                     document.getElementById(`tab-${next}`)?.focus()
                   }}>
-                    <button id="tab-launcher" aria-controls="panel-launcher" tabIndex={panelView === 'launcher' ? 0 : -1} className={panelView === 'launcher' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'launcher'} onClick={() => setPanelView('launcher')}><Waves size={14} />启动台</button>
-                    <button id="tab-notifications" aria-controls="panel-notifications" tabIndex={panelView === 'notifications' ? 0 : -1} className={panelView === 'notifications' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'notifications'} onClick={() => {
-                      setPanelView('notifications')
-                      void window.island?.markNotificationsRead()
-                    }}><Bell size={14} />通知{notificationState.unreadCount > 0 && <i>{Math.min(99, notificationState.unreadCount)}</i>}</button>
+                    <button id="tab-launcher" tabIndex={panelView === 'launcher' ? 0 : -1} className={panelView === 'launcher' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'launcher'} onClick={() => selectPanelTab('launcher')}><Waves size={14} />启动台</button>
+                    <button id="tab-notifications" tabIndex={panelView === 'notifications' ? 0 : -1} className={panelView === 'notifications' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'notifications'} onClick={() => selectPanelTab('notifications')}><Bell size={14} />通知{notificationState.unreadCount > 0 && <i>{Math.min(99, notificationState.unreadCount)}</i>}</button>
+                    <button id="tab-clipboard" tabIndex={panelView === 'clipboard' ? 0 : -1} className={panelView === 'clipboard' ? 'active' : ''} type="button" role="tab" aria-selected={panelView === 'clipboard'} onClick={() => selectPanelTab('clipboard')}><ClipboardList size={14} />剪贴板{notificationState.clipboardItems.length > 0 && <i>{Math.min(99, notificationState.clipboardItems.length)}</i>}</button>
                   </div>
                   <span className="panelClock" title={formatDate(date)}><time>{time}</time></span>
                   <div className="panelTools">
@@ -1333,7 +1601,7 @@ function App() {
                 </div>
 
                 <div id="panel-launcher" className="launcherWorkspaceTab" hidden={panelView !== 'launcher'} role="tabpanel" aria-labelledby="tab-launcher">
-                  <LauncherWorkspace state={launcherState} active={surfaceActive && panelView === 'launcher'} onStateChange={setLauncherState} notify={notify} onManage={() => window.island?.openLauncherManager()} onCreator={() => window.island?.openCreator()} onSettings={() => window.island?.openSettings()} onCollapse={() => setExpanded(false)} />
+                  <LauncherWorkspace state={launcherState} active={surfaceActive && morphMode === 'expanded' && panelView === 'launcher'} onStateChange={setLauncherState} notify={notify} onManage={() => window.island?.openLauncherManager()} onCreator={() => window.island?.openCreator()} onSettings={() => window.island?.openSettings()} onCollapse={() => setExpanded(false)} />
                 </div>
                 <div id="panel-notifications" className="notificationTabPanel" hidden={panelView !== 'notifications'} role="tabpanel" aria-labelledby="tab-notifications">
                   <NotificationPanelContent
@@ -1347,12 +1615,35 @@ function App() {
                     }}
                   />
                 </div>
+                <div id="panel-clipboard" className="notificationTabPanel" hidden={panelView !== 'clipboard'} role="tabpanel" aria-labelledby="tab-clipboard">
+                  <ClipboardPanelContent
+                    state={notificationState}
+                    settings={snapshot.settings}
+                    onEnable={() => updateGeneralSettings({ clipboardArchiveEnabled: true })}
+                    onOpenDir={() => void window.island?.openClipboardArchiveDirectory().catch(() => notifyError('剪贴板记录目录打开失败'))}
+                    onCopy={(id) => {
+                      if (window.island) {
+                        void window.island.copyClipboardItem(id).then((ok) => {
+                          if (ok) notify('已回填到剪贴板')
+                          else notifyError('该记录文件已不存在')
+                        }).catch(() => notifyError('回填剪贴板失败'))
+                      } else {
+                        notify('预览：已回填剪贴板')
+                      }
+                    }}
+                    onClear={() => {
+                      void window.island?.clearClipboardItems()
+                      setNotificationState((current) => ({ ...current, clipboardItems: [] }))
+                    }}
+                  />
+                </div>
                 <footer className="panelFooter" aria-label="流屿桌面工具">
                   <button title="管理快捷入口" type="button" onClick={() => window.island?.openLauncherManager()}><Library size={14} />管理</button>
                   <button title="流云创作器" type="button" onClick={() => window.island?.openCreator()}><Waves size={14} />创作</button>
                   <button title="通用设置" type="button" onClick={() => window.island?.openSettings()}><Settings size={14} />设置</button>
                   <span className="panelCapacity" aria-label={`已添加 ${launcherState.entries.length} 个快捷入口，最多 ${maxLauncherEntries} 个`}>{launcherState.entries.length} / {maxLauncherEntries}</span>
                 </footer>
+              </div>
             </div>
           </div>
         )}

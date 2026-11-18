@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline'
 import { DesktopBoxesController } from './desktopBoxes'
 import { desktopBoxesMessageSchema } from '../shared/desktopBoxes'
 
-const executablePath = path.resolve('build/generated/desktop-boxes/SmartDeskBox.DesktopApp.exe')
+const executablePath = path.resolve('build/generated/native/SmartDeskBox.DesktopApp.exe')
 assert.ok(existsSync(executablePath), '请先运行 npm run desktop:build')
 mkdirSync(path.resolve('output'), { recursive: true })
 const root = mkdtempSync(path.resolve('output/desktop-boxes-test-'))

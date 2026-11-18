@@ -41,12 +41,19 @@ export const fluidCloudCreationSchema = z.object({
   cloud: fluidCloudSchema
 })
 
+const shortcutAcceleratorSchema = z.string().trim().min(3).max(64).refine(
+  (value) => /(?:Ctrl|Control|CommandOrControl|Alt|Shift|Super|Meta)\+.+/i.test(value),
+  { message: '快捷键必须包含修饰键（Ctrl / Alt / Shift / Win）与主键' }
+)
+
 export const settingsSchema = z.object({
   hideDelayMs: z.number().int().min(300).max(3000).default(800),
   position: z.enum(['left', 'center', 'right']).default('center'),
   opacity: z.number().min(0.7).max(1).default(0.95),
   theme: z.enum(themes).default('graphite'),
   launchAtLogin: z.boolean().default(false),
+  shortcutAccelerator: shortcutAcceleratorSchema.default('Ctrl+Alt+Space'),
+  hotkeyDirectExpand: z.boolean().default(false),
   clipboardArchiveEnabled: z.boolean().default(false),
   notificationsEnabled: z.boolean().default(false),
   desktopPopupNotificationsEnabled: z.boolean().default(false),

@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { FilePlus2, FolderPlus, Pin, PinOff, Plus, Search, Trash2, X } from 'lucide-react'
 import type { LauncherState } from '../../shared/launcher'
+import { matchesSearchQuery } from '../../shared/pinyin'
 import { LaunchItemIcon } from './LauncherWorkspace'
 
 export function LocalLaunchManager({ state, onStateChange, notify }: { state: LauncherState; onStateChange: (state: LauncherState) => void; notify: (message: string) => void }) {
@@ -11,7 +12,7 @@ export function LocalLaunchManager({ state, onStateChange, notify }: { state: La
   const [names, setNames] = useState<Record<string, string>>({})
   const pending = useRef(false)
   const entries = state.localEntries ?? []
-  const visible = entries.filter(item => `${item.name} ${item.path}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+  const visible = entries.filter(item => matchesSearchQuery(`${item.name} ${item.path}`, search))
   const run = async (action: () => Promise<LauncherState | null>, message: string) => {
     if (pending.current) return
     pending.current = true; setBusy(true); setError('')

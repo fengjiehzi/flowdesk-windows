@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -31,7 +32,13 @@ public sealed class ItemViewModel(ClassifiedItem item)
     {
         try
         {
-            var path = item.TargetPath != null && File.Exists(item.TargetPath) ? item.TargetPath : item.SourceFilePath;
+            var path = item.Extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase) && File.Exists(item.SourceFilePath)
+                ? item.SourceFilePath
+                : item.TargetPath != null && File.Exists(item.TargetPath)
+                    ? item.TargetPath
+                    : item.SourceFilePath;
+            if (LoadShellIcon(path) is { } shellIcon) return shellIcon;
+            if (Directory.Exists(path)) return null;
             using var icon = System.Drawing.Icon.ExtractAssociatedIcon(path);
             if (icon == null) return null;
             var image = Imaging.CreateBitmapSourceFromHIcon(icon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(32, 32));
@@ -41,6 +48,40 @@ public sealed class ItemViewModel(ClassifiedItem item)
         catch (Exception ex) when (ex is ArgumentException or IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
         { return null; }
     }
+
+    private static ImageSource? LoadShellIcon(string path)
+    {
+        var info = new ShFileInfo();
+        var flags = 0x000000100u | 0x000000000u; // SHGFI_ICON | SHGFI_LARGEICON
+        if (SHGetFileInfo(path, 0, ref info, (uint)Marshal.SizeOf<ShFileInfo>(), flags) == IntPtr.Zero || info.Icon == IntPtr.Zero)
+            return null;
+        try
+        {
+            var image = Imaging.CreateBitmapSourceFromHIcon(info.Icon, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(32, 32));
+            image.Freeze();
+            return image;
+        }
+        finally
+        {
+            DestroyIcon(info.Icon);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ShFileInfo
+    {
+        public IntPtr Icon;
+        public int IconIndex;
+        public uint Attributes;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string DisplayName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string TypeName;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SHGetFileInfo(string path, uint attributes, ref ShFileInfo info, uint size, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(IntPtr icon);
 }
 
 public sealed class CategoryBox : INotifyPropertyChanged

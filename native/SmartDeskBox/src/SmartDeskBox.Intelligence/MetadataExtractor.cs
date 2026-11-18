@@ -13,6 +13,27 @@ public sealed class MetadataExtractor
 
     public DesktopScan ScanRealDesktop()
     {
+        if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+            return ScanRealDesktopCore();
+
+        // 确保 WScript.Shell COM 组件在 STA 套间内执行，避免跨套间封送开销。
+        DesktopScan? scan = null;
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try { scan = ScanRealDesktopCore(); }
+            catch (Exception ex) { failure = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        thread.Join();
+        if (failure != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        return scan!;
+    }
+
+    private DesktopScan ScanRealDesktopCore()
+    {
         var items = new List<DesktopItemMetadata>();
         var warnings = new List<string>();
         var desktops = new[]
@@ -20,24 +41,49 @@ public sealed class MetadataExtractor
             (Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), false),
             (Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), true)
         };
-        foreach (var (path, isPublic) in desktops.DistinctBy(x => x.Item1, StringComparer.OrdinalIgnoreCase))
+        object? shell = null;
+        try
         {
-            if (!Directory.Exists(path)) continue;
-            try
+            var type = Type.GetTypeFromProgID("WScript.Shell");
+            if (type != null) shell = Activator.CreateInstance(type);
+        }
+        catch { }
+        try
+        {
+            foreach (var (path, isPublic) in desktops.DistinctBy(x => x.Item1, StringComparer.OrdinalIgnoreCase))
             {
-                foreach (var source in Directory.GetFileSystemEntries(path))
+                if (!Directory.Exists(path)) continue;
+                try
                 {
-                    if (Path.GetFileName(source).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
-                    items.Add(Extract(source, isPublic, warnings));
+                    foreach (var source in Directory.GetFileSystemEntries(path))
+                    {
+                        var name = Path.GetFileName(source);
+                        if (name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
+                        try
+                        {
+                            // 与 Explorer 默认行为一致，忽略隐藏及系统文件以保持分区计数同步。
+                            var attrs = File.GetAttributes(source);
+                            if ((attrs & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
+                        }
+                        catch { }
+                        items.Add(ExtractCore(source, isPublic, warnings, shell));
+                    }
                 }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                { warnings.Add($"无法完整读取 {path}：{ex.Message}"); }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            { warnings.Add($"无法完整读取 {path}：{ex.Message}"); }
+        }
+        finally
+        {
+            if (shell != null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell);
         }
         return new(items.OrderBy(x => x.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToList(), warnings);
     }
 
     public DesktopItemMetadata Extract(string source, bool isPublic = false, List<string>? warnings = null)
+        => ExtractCore(source, isPublic, warnings, null);
+
+    private DesktopItemMetadata ExtractCore(string source, bool isPublic, List<string>? warnings, object? sharedShell)
     {
         source = Path.GetFullPath(source);
         var extension = Path.GetExtension(source).ToLowerInvariant();
@@ -51,7 +97,7 @@ public sealed class MetadataExtractor
         };
         try
         {
-            if (extension == ".lnk") item = ReadShortcut(item);
+            if (extension == ".lnk") item = ReadShortcut(item, sharedShell);
             else if (extension == ".url")
             {
                 var target = File.ReadLines(source).Select(l => l.Trim())
@@ -61,11 +107,12 @@ public sealed class MetadataExtractor
             else if (extension == ".exe") item = item with { TargetPath = source };
 
             var targetPath = item.TargetPath;
-            if (extension == ".lnk" && targetPath != null && (Directory.Exists(targetPath) ||
+            var isUnc = targetPath != null && targetPath.StartsWith(@"\\", StringComparison.Ordinal);
+            if (extension == ".lnk" && targetPath != null && !isUnc && (Directory.Exists(targetPath) ||
                 (Path.IsPathFullyQualified(targetPath) && Path.GetExtension(targetPath).Length == 0)))
                 item = item with { IsDirectory = true };
             var isGame = targetPath != null && GameProtocols.Any(p => targetPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-            if (targetPath != null && Path.IsPathFullyQualified(targetPath) &&
+            if (targetPath != null && !isUnc && Path.IsPathFullyQualified(targetPath) &&
                 Path.GetExtension(targetPath).Equals(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(targetPath))
             {
                 var parent = Path.GetDirectoryName(targetPath)!;
@@ -90,16 +137,20 @@ public sealed class MetadataExtractor
         return item;
     }
 
-    private static DesktopItemMetadata ReadShortcut(DesktopItemMetadata item)
+    private static DesktopItemMetadata ReadShortcut(DesktopItemMetadata item, object? sharedShell)
     {
-        object? shell = null;
+        var ownsShell = sharedShell is null;
+        object? shell = sharedShell;
         object? shortcut = null;
         try
         {
-            var type = Type.GetTypeFromProgID("WScript.Shell");
-            if (type == null) return item;
-            shell = Activator.CreateInstance(type);
-            if (shell == null) return item;
+            if (shell == null)
+            {
+                var type = Type.GetTypeFromProgID("WScript.Shell");
+                if (type == null) return item;
+                shell = Activator.CreateInstance(type);
+                if (shell == null) return item;
+            }
             shortcut = ((dynamic)shell).CreateShortcut(item.SourceFilePath);
             return item with
             {
@@ -112,7 +163,7 @@ public sealed class MetadataExtractor
         finally
         {
             if (shortcut != null && Marshal.IsComObject(shortcut)) Marshal.FinalReleaseComObject(shortcut);
-            if (shell != null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell);
+            if (ownsShell && shell != null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell);
         }
     }
 

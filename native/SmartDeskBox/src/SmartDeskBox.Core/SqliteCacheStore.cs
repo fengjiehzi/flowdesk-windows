@@ -10,11 +10,12 @@ public sealed class SqliteCacheStore
     {
         WorkspacePaths.EnsureNoReparsePoints(databasePath);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(databasePath))!);
-        connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
+        connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, DefaultTimeout = 5 }.ToString();
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText = """
             PRAGMA journal_mode=WAL;
+            PRAGMA busy_timeout=5000;
             CREATE TABLE IF NOT EXISTS manual_classification (
                 source_path TEXT PRIMARY KEY, category TEXT NOT NULL,
                 purpose_summary TEXT NOT NULL, updated_unix_sec INTEGER NOT NULL);
@@ -42,6 +43,11 @@ public sealed class SqliteCacheStore
         return connection;
     }
 
+    private static AppCategory ParseCategory(string value)
+        => Enum.TryParse<AppCategory>(value, out var category) && Enum.IsDefined(category) ? category : AppCategory.PENDING;
+
+    public static void ClosePools() => SqliteConnection.ClearAllPools();
+
     public ClassificationResult? Find(DesktopItemMetadata item, bool preserveTier = false)
     {
         using var connection = Open();
@@ -50,7 +56,7 @@ public sealed class SqliteCacheStore
             manual.CommandText = "SELECT category,purpose_summary FROM manual_classification WHERE source_path=$source";
             manual.Parameters.AddWithValue("$source", Path.GetFullPath(item.SourceFilePath).ToLowerInvariant());
             using var row = manual.ExecuteReader();
-            if (row.Read()) return new(item.ItemId, item.SignatureHash, Enum.Parse<AppCategory>(row.GetString(0)), 1, "USER_MANUAL", row.GetString(1));
+            if (row.Read()) return new(item.ItemId, item.SignatureHash, ParseCategory(row.GetString(0)), 1, "USER_MANUAL", row.GetString(1));
         }
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT category,confidence,hit_tier,purpose_summary,display_name FROM app_classification_cache WHERE signature_hash=$hash";
@@ -59,7 +65,7 @@ public sealed class SqliteCacheStore
         if (!reader.Read()) return null;
         // Legacy shared-target preferences are adopted only for the original display name.
         if (reader.GetString(2) == "USER_MANUAL" && !reader.GetString(4).Equals(item.DisplayName, StringComparison.OrdinalIgnoreCase)) return null;
-        return new(item.ItemId, item.SignatureHash, Enum.Parse<AppCategory>(reader.GetString(0)),
+        return new(item.ItemId, item.SignatureHash, ParseCategory(reader.GetString(0)),
             reader.GetDouble(1), preserveTier || reader.GetString(2) == "USER_MANUAL" ? reader.GetString(2) : "CACHE", reader.GetString(3));
     }
 
@@ -180,9 +186,17 @@ public sealed class SqliteCacheStore
         using var reader = command.ExecuteReader();
         var records = new List<FileTransaction>();
         while (reader.Read()) records.Add(new(reader.GetInt64(0), reader.GetString(1), reader.GetString(2),
-            reader.GetString(3), reader.GetString(4), Enum.Parse<AppCategory>(reader.GetString(5)),
+            reader.GetString(3), reader.GetString(4), ParseCategory(reader.GetString(5)),
             reader.GetString(6), reader.GetString(7), reader.GetInt64(8), reader.GetString(9), reader.GetString(10)));
         return records;
+    }
+
+    public string? GetLatestCompletedBatchId()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT batch_id FROM file_transaction_log WHERE status='COMPLETED' ORDER BY tx_id DESC LIMIT 1";
+        return command.ExecuteScalar() as string;
     }
 
     public void MarkRolledBack(string batchId)

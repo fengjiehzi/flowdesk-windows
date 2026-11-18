@@ -46,6 +46,16 @@ export const desktopNotificationAdapterSchema = z.object({
   status: desktopAdapterStatusSchema
 })
 
+export const clipboardHistoryItemSchema = z.object({
+  id: z.string().min(1).max(128),
+  kind: z.enum(['text', 'image', 'file']),
+  preview: z.string().max(500),
+  text: z.string().max(20_000).optional(),
+  filePath: z.string().max(4096).optional(),
+  thumbnail: z.string().startsWith('data:image/png;base64,').max(150_000).optional(),
+  createdAt: z.string().datetime()
+})
+
 export const notificationCenterStateSchema = z.object({
   accessStatus: notificationAccessStatusSchema,
   enabled: z.boolean(),
@@ -56,6 +66,7 @@ export const notificationCenterStateSchema = z.object({
   desktopAdapters: z.array(desktopNotificationAdapterSchema).max(2),
   clipboardArchiveError: z.string().max(500).nullable().default(null),
   clipboardArchiveActive: z.boolean().default(false),
+  clipboardItems: z.array(clipboardHistoryItemSchema).max(50).default([]),
   bridgeStatus: z.enum(['running', 'unavailable', 'stopped']).default('stopped')
 })
 
@@ -70,7 +81,7 @@ export const bridgeEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('suppression'), state: notificationSuppressionSchema }),
   z.object({ type: z.literal('clipboardArchiveError'), message: z.string().max(500) }),
-  z.object({ type: z.literal('clipboardArchiveSaved') }),
+  z.object({ type: z.literal('clipboardArchiveSaved'), item: clipboardHistoryItemSchema.optional() }),
   z.object({ type: z.literal('clipboardArchiveStatus'), enabled: z.boolean() }),
   z.object({ type: z.literal('error'), message: z.string().max(500) })
 ])
@@ -79,6 +90,7 @@ export type NotificationAccessStatus = z.infer<typeof notificationAccessStatusSc
 export type NotificationSuppression = z.infer<typeof notificationSuppressionSchema>
 export type DesktopAdapterId = z.infer<typeof desktopAdapterIdSchema>
 export type DesktopNotificationAdapter = z.infer<typeof desktopNotificationAdapterSchema>
+export type ClipboardHistoryItem = z.infer<typeof clipboardHistoryItemSchema>
 export type MutedNotificationApp = z.infer<typeof mutedNotificationAppSchema>
 export type BridgeNotification = z.infer<typeof bridgeNotificationSchema>
 export type SystemNotificationItem = z.infer<typeof systemNotificationItemSchema>

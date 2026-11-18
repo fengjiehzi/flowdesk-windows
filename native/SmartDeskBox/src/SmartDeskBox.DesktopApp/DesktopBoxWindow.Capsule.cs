@@ -9,6 +9,7 @@ namespace SmartDeskBox.DesktopApp;
 public partial class DesktopBoxWindow
 {
     private readonly DispatcherTimer capsuleTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer hoverExpandTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     private bool temporaryExpansion, changingTemporarily, categoryMenuOpen;
     private System.Windows.Rect? capsuleAnchor;
     private HeaderDrop? headerDrop;
@@ -28,8 +29,14 @@ public partial class DesktopBoxWindow
                 ShellView.IsEditing || ShellView.HasPendingImports || categoryMenuOpen || NativeMenuOpen()) return;
             RestoreCapsule();
         };
-        MouseEnter += (_, _) => { if (settings.HoverExpand) ExpandTemporarily(); };
-        Closed += (_, _) => { capsuleTimer.Stop(); if (headerDrop is not null) { headerDrop.DragLeave(); RevokeDragDrop(Handle); } };
+        hoverExpandTimer.Tick += (_, _) =>
+        {
+            hoverExpandTimer.Stop();
+            if (settings.HoverExpand && !IsClosed && IsMouseOver) ExpandTemporarily();
+        };
+        MouseEnter += (_, _) => { if (settings.HoverExpand && Box.IsCollapsed) hoverExpandTimer.Start(); };
+        MouseLeave += (_, _) => hoverExpandTimer.Stop();
+        Closed += (_, _) => { capsuleTimer.Stop(); hoverExpandTimer.Stop(); if (headerDrop is not null) { headerDrop.DragLeave(); RevokeDragDrop(Handle); } };
     }
 
     private void ExpandTemporarily()

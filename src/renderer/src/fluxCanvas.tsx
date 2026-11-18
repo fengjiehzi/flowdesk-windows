@@ -167,10 +167,16 @@ export function FluxCanvas({
   const colorsRef = useRef({ baseColor, mistColor })
   const renderOnceRef = useRef<(() => void) | null>(null)
   const pausedRef = useRef(paused)
+  const activeRef = useRef(active)
+  const animatedRef = useRef(animated)
+  const interactiveRef = useRef(interactive)
   const [fallback, setFallback] = useState(false)
   cloudRef.current = cloud
   colorsRef.current = { baseColor, mistColor }
   pausedRef.current = paused
+  activeRef.current = active
+  animatedRef.current = animated
+  interactiveRef.current = interactive
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -251,12 +257,12 @@ export function FluxCanvas({
       stir *= Math.exp(-delta * 1.6 * current.response)
       flowTime += delta * current.speed * (.22 + easedHover * .08 + stir * .55)
       draw()
-      if (visible && active && animated && !pausedRef.current && !reducedMotion.matches) frame = requestAnimationFrame(animate)
+      if (visible && activeRef.current && animatedRef.current && !pausedRef.current && !reducedMotion.matches) frame = requestAnimationFrame(animate)
     }
 
     const requestRender = () => {
       if (!resources || lost) return
-      if (visible && active && animated && !pausedRef.current && !reducedMotion.matches) {
+      if (visible && activeRef.current && animatedRef.current && !pausedRef.current && !reducedMotion.matches) {
         if (!frame) {
           previousTime = performance.now()
           frame = requestAnimationFrame(animate)
@@ -269,9 +275,10 @@ export function FluxCanvas({
     }
     renderOnceRef.current = requestRender
 
+    let cachedRect: DOMRect | null = null
     const onPointerMove = (event: PointerEvent) => {
-      if (!interactive || pausedRef.current) return
-      const rect = canvas.getBoundingClientRect()
+      if (!interactiveRef.current || pausedRef.current || !activeRef.current) return
+      const rect = cachedRect ?? (cachedRect = canvas.getBoundingClientRect())
       const inside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
       hoverTarget = inside ? 1 : 0
       if (inside) {
@@ -312,6 +319,7 @@ export function FluxCanvas({
     }
 
     const observer = new ResizeObserver(([entry]) => {
+      cachedRect = null
       if (entry) resize(entry.contentRect.width, entry.contentRect.height)
       requestRender()
     })
@@ -350,9 +358,9 @@ export function FluxCanvas({
         }
       }
     }
-  }, [active, animated, interactive])
+  }, [])
 
-  useEffect(() => renderOnceRef.current?.(), [cloud, baseColor, mistColor, paused])
+  useEffect(() => renderOnceRef.current?.(), [cloud, baseColor, mistColor, paused, active, animated, interactive])
 
   return (
     <canvas
